@@ -1,0 +1,12 @@
+{
+  "name": "jeopardy-game",
+  "version": "1.0.0",
+  "description": "Jeopardy Game - Educational Trivia Platform",
+  "scripts": {
+    "build": "echo 'Build completed'",
+    "start": "php artisan serve --host=0.0.0.0 --port=$PORT"
+  },
+  "keywords": ["jeopardy", "trivia", "game", "laravel"],
+  "author": "Your Name",
+  "license": "MIT"
+}
