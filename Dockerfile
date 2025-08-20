@@ -27,21 +27,28 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Install PHP dependencies
 RUN composer install --optimize-autoloader --no-dev --no-interaction
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy package files (handle missing package-lock.json)
+COPY package.json ./
 
-# Install Node.js dependencies
-RUN npm ci --only=production
+# Install Node.js dependencies (use npm install instead of npm ci since no lock file)
+RUN npm install --only=production
 
 # Copy application files
 COPY . .
+
+# Create .env file if it doesn't exist
+RUN if [ ! -f .env ]; then cp .env.example .env; fi
+
+# Generate application key
+RUN php artisan key:generate --no-interaction
 
 # Build assets
 RUN npm run build
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www \
-    && chmod -R 755 /var/www/storage
+    && chmod -R 755 /var/www/storage \
+    && chmod -R 755 /var/www/bootstrap/cache
 
 # Cache Laravel configuration
 RUN php artisan config:cache \
