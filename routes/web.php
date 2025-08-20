@@ -4,6 +4,11 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\JeopardyController;
 use App\Http\Controllers\SimpleCustomController;
 
+// Health check route for Railway
+Route::get('/health', function () {
+    return response()->json(['status' => 'healthy', 'timestamp' => now()]);
+});
+
 Route::get('/', function () {
     return redirect('/jeopardy');
 });

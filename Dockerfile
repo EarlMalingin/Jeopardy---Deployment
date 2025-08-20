@@ -64,8 +64,8 @@ RUN php artisan key:generate --force \
     && php artisan view:cache \
     && php artisan optimize
 
-# Expose port
-EXPOSE 8000
+# Expose port (Railway uses $PORT environment variable)
+EXPOSE $PORT
 
-# Start the application
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+# Start the application using the PORT environment variable
+CMD php artisan serve --host=0.0.0.0 --port=$PORT
