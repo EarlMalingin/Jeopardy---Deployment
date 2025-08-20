@@ -27,40 +27,39 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 # Set working directory
 WORKDIR /var/www
 
-# Copy composer files
-COPY composer.json composer.lock ./
-
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+# Set environment variables for Composer
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_NO_INTERACTION=1
+
+# Copy composer files first for better caching
+COPY composer.json composer.lock ./
+
 # Install PHP dependencies
-RUN composer install --optimize-autoloader --no-dev --no-interaction
+RUN composer install --optimize-autoloader --no-dev --no-scripts
 
-# Copy package files (handle missing package-lock.json)
-COPY package.json ./
-
-# Install Node.js dependencies (use npm install instead of npm ci since no lock file)
-RUN npm install --only=production
-
-# Copy application files
+# Copy entire application
 COPY . .
 
-# Create .env file if it doesn't exist
-RUN if [ ! -f .env ]; then cp .env.example .env; fi
-
-# Generate application key
-RUN php artisan key:generate --no-interaction
-
-# Build assets
-RUN npm run build
-
-# Set permissions
+# Set proper permissions
 RUN chown -R www-data:www-data /var/www \
     && chmod -R 755 /var/www/storage \
     && chmod -R 755 /var/www/bootstrap/cache
 
-# Cache Laravel configuration
-RUN php artisan config:cache \
+# Create .env file if it doesn't exist
+RUN if [ ! -f .env ]; then cp .env.example .env; fi
+
+# Install Node.js dependencies
+RUN npm install --only=production
+
+# Build assets
+RUN npm run build
+
+# Generate application key and optimize
+RUN php artisan key:generate --force \
+    && php artisan config:cache \
     && php artisan route:cache \
     && php artisan view:cache \
     && php artisan optimize
