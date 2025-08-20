@@ -588,9 +588,6 @@
                         <p class="text-green-300 text-xs sm:text-sm">🎯 <strong>Single Player Mode:</strong> Create your own custom game to play solo</p>
                     </div>
                     @endif
-                    <button onclick="fillSampleData()" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors touch-button text-sm sm:text-base">
-                        Fill Sample Data (works with any category count)
-                    </button>
                 </div>
                 
                 <form id="customGameForm" class="space-y-6">
@@ -815,8 +812,7 @@
 
 
 
-        function fillSampleData() {
-            console.log('fillSampleData called');
+        // fillSampleData function removed
             
             // Get current category count
             const categoryCount = parseInt(document.getElementById('categoryCount').value);
@@ -1357,8 +1353,7 @@
         }, 200); // Increased timeout to ensure DOM is ready
     }
 
-    function generateAdditionalQuestions(categoryIndex, questionNumber) {
-        // Additional sample questions for categories beyond the original 5
+    // generateAdditionalQuestions function removed
         const additionalQuestions = {
             1: { // Science & Nature
                 6: { question: 'What is the largest mammal on Earth?', answer: 'Blue Whale' },
