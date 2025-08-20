@@ -1,20 +1,24 @@
-# Use PHP 8.2 FPM Alpine image
-FROM php:8.2-fpm-alpine
+# Use PHP 8.2 FPM Debian image for better stability
+FROM php:8.2-fpm
 
 # Install system dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     git \
     curl \
     libpng-dev \
-    libjpeg-turbo-dev \
-    freetype-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
     libxml2-dev \
     zip \
     unzip \
     nodejs \
     npm \
     pkg-config \
-    oniguruma-dev
+    libonig-dev \
+    autoconf \
+    g++ \
+    make \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions with proper dependencies
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
