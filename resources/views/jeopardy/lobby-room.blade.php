@@ -751,14 +751,32 @@
                 </div>
                 <p class="text-gray-400 text-sm mt-2">Redirecting to game...</p>
                 
-                <!-- Manual Redirect Button (appears after 10 seconds if auto-redirect fails) -->
-                <div id="manualRedirectSection" class="mt-4 hidden">
-                    <p class="text-yellow-400 text-sm mb-2">Automatic redirect didn't work? Click below:</p>
-                    <button onclick="manualRedirectToGame()" 
-                            class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg text-sm transition-all duration-300 transform hover:scale-105">
-                        🎮 Join Game Manually
-                    </button>
-                </div>
+            <!-- Manual Redirect Button (appears after 10 seconds if auto-redirect fails) -->
+            <div id="manualRedirectSection" class="mt-4 hidden">
+                <p class="text-yellow-400 text-sm mb-2">Automatic redirect didn't work? Click below:</p>
+                <button onclick="manualRedirectToGame()" 
+                        class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg text-sm transition-all duration-300 transform hover:scale-105">
+                    🎮 Join Game Manually
+                </button>
+            </div>
+            
+            <!-- Mobile-specific immediate manual redirect button -->
+            <div id="mobileManualRedirectSection" class="mt-4 hidden">
+                <p class="text-red-400 text-sm mb-2 font-bold">📱 Mobile Device Detected - Click to Join Game:</p>
+                <button onclick="manualRedirectToGame()" 
+                        class="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-bold py-4 px-8 rounded-lg text-lg transition-all duration-300 transform hover:scale-105 w-full">
+                    🎮 JOIN GAME NOW
+                </button>
+            </div>
+            
+            <!-- Mobile-specific immediate manual redirect button -->
+            <div id="mobileManualRedirectSection" class="mt-4 hidden">
+                <p class="text-red-400 text-sm mb-2 font-bold">📱 Mobile Device Detected - Click to Join Game:</p>
+                <button onclick="manualRedirectToGame()" 
+                        class="bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-bold py-4 px-8 rounded-lg text-lg transition-all duration-300 transform hover:scale-105 w-full">
+                    🎮 JOIN GAME NOW
+                </button>
+            </div>
                 
                 <!-- Reset Game Button (only for host) -->
                 <div class="mt-4">
@@ -935,13 +953,69 @@
         function manualRedirectToGame() {
             const gameType = '{{ $lobby->game_settings["game_type"] ?? "standard" }}';
             const lobbyCode = '{{ $lobby->lobby_code }}';
+            const isMobile = window.innerWidth <= 768;
             
-            console.log('Manual redirect triggered:', { gameType, lobbyCode });
+            console.log('MANUAL redirect triggered:', { gameType, lobbyCode, isMobile });
             
+            // ENHANCED URL generation with mobile-specific parameters
+            let redirectUrl;
             if (gameType === 'custom') {
-                window.location.href = `/jeopardy/play-custom?lobby=${lobbyCode}`;
+                // Add mobile-specific parameters to help with game state loading
+                const mobileParams = isMobile ? '&mobile=1&t=' + Date.now() : '';
+                redirectUrl = `/jeopardy/play-custom?lobby=${lobbyCode}${mobileParams}`;
             } else {
-                window.location.href = '/jeopardy/setup';
+                redirectUrl = '/jeopardy/setup';
+            }
+            
+            console.log('Generated manual redirect URL:', redirectUrl);
+            
+            if (isMobile) {
+                // MOBILE: Try multiple redirect methods for manual redirect
+                console.log('MOBILE: Manual redirect with multiple methods');
+                
+                // Method 1: Standard redirect
+                try {
+                    window.location.href = redirectUrl;
+                } catch (error) {
+                    console.error('MOBILE: Manual redirect method 1 failed:', error);
+                    
+                    // Method 2: Replace
+                    try {
+                        window.location.replace(redirectUrl);
+                    } catch (error2) {
+                        console.error('MOBILE: Manual redirect method 2 failed:', error2);
+                        
+                        // Method 3: Assign
+                        try {
+                            window.location.assign(redirectUrl);
+                        } catch (error3) {
+                            console.error('MOBILE: Manual redirect method 3 failed:', error3);
+                            
+                            // Method 4: Open in same window
+                            try {
+                                window.open(redirectUrl, '_self');
+                            } catch (error4) {
+                                console.error('MOBILE: Manual redirect method 4 failed:', error4);
+                                
+                                // Method 5: Create and click link
+                                try {
+                                    const link = document.createElement('a');
+                                    link.href = redirectUrl;
+                                    link.style.display = 'none';
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                } catch (error5) {
+                                    console.error('MOBILE: All manual redirect methods failed!');
+                                    alert('Redirect failed. Please copy this URL and paste it in your browser: ' + redirectUrl);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // DESKTOP: Standard redirect
+                window.location.href = redirectUrl;
             }
         }
         
@@ -1164,46 +1238,62 @@
             }
         }
         
-        // Enhanced auto-refresh with multiple fallback mechanisms
+        // ULTRA-RELIABLE MOBILE-FIRST STATUS CHECKING SYSTEM
         let lastPlayerCount = {{ count($lobby->players) }};
         let redirectInProgress = false;
         let statusCheckCount = 0;
         let failedChecks = 0;
-        let maxFailedChecks = 3;
+        let maxFailedChecks = 5;
+        let isMobile = window.innerWidth <= 768;
         
-        // Multiple status check intervals for redundancy
+        console.log('Initializing ULTRA-RELIABLE status checking system');
+        console.log('Device type:', isMobile ? 'MOBILE' : 'DESKTOP');
+        console.log('Lobby code:', '{{ $lobby->lobby_code }}');
+        
+        // AGGRESSIVE status checking for mobile devices
         const statusCheckIntervals = [];
         
-        // Primary status check (every 3 seconds)
-        statusCheckIntervals.push(setInterval(() => {
-            performStatusCheck('primary');
-        }, 3000));
-        
-        // Secondary status check (every 5 seconds)
-        statusCheckIntervals.push(setInterval(() => {
-            performStatusCheck('secondary');
-        }, 5000));
-        
-        // Mobile-specific faster check (every 2 seconds on mobile)
-        if (window.innerWidth <= 768) {
+        if (isMobile) {
+            // MOBILE: Check every 1 second for maximum responsiveness
             statusCheckIntervals.push(setInterval(() => {
-                performStatusCheck('mobile');
+                performStatusCheck('mobile-aggressive');
+            }, 1000));
+            
+            // MOBILE: Backup check every 2 seconds
+            statusCheckIntervals.push(setInterval(() => {
+                performStatusCheck('mobile-backup');
             }, 2000));
+            
+            // MOBILE: Emergency check every 3 seconds
+            statusCheckIntervals.push(setInterval(() => {
+                performStatusCheck('mobile-emergency');
+            }, 3000));
+        } else {
+            // DESKTOP: Standard checks
+            statusCheckIntervals.push(setInterval(() => {
+                performStatusCheck('desktop-primary');
+            }, 3000));
+            
+            statusCheckIntervals.push(setInterval(() => {
+                performStatusCheck('desktop-backup');
+            }, 5000));
         }
         
         function performStatusCheck(type) {
             if (redirectInProgress) {
-                console.log(`${type} status check: Redirect already in progress, skipping`);
+                console.log(`${type}: Redirect already in progress, skipping`);
                 return;
             }
             
             statusCheckCount++;
-            console.log(`${type} status check #${statusCheckCount} for lobby {{ $lobby->lobby_code }}`);
+            console.log(`${type}: Status check #${statusCheckCount} for lobby {{ $lobby->lobby_code }}`);
             
-            // Use multiple endpoints for redundancy
+            // Use multiple endpoints with cache-busting
+            const timestamp = Date.now();
             const endpoints = [
-                '/jeopardy/lobby/{{ $lobby->lobby_code }}/status',
-                '/jeopardy/lobby/{{ $lobby->lobby_code }}/status?t=' + Date.now()
+                `/jeopardy/lobby/{{ $lobby->lobby_code }}/status?t=${timestamp}`,
+                `/jeopardy/lobby/{{ $lobby->lobby_code }}/status?cache=${timestamp}`,
+                `/jeopardy/lobby/{{ $lobby->lobby_code }}/status?mobile=${isMobile}&t=${timestamp}`
             ];
             
             const endpoint = endpoints[Math.floor(Math.random() * endpoints.length)];
@@ -1213,19 +1303,21 @@
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                    'X-Requested-With': 'XMLHttpRequest'
                 }
             })
             .then(response => {
-                console.log(`${type} status check response:`, response.status);
+                console.log(`${type}: Response status:`, response.status);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 return response.json();
             })
             .then(data => {
-                console.log(`${type} status check data:`, data);
+                console.log(`${type}: Response data:`, data);
                 failedChecks = 0; // Reset failed checks on success
                 
                 if (data.success) {
@@ -1233,72 +1325,159 @@
                     const gameType = data.lobby.game_settings?.game_type || 'standard';
                     const currentPlayerCount = data.lobby.players?.length || 0;
                     
-                    console.log(`${type} lobby status:`, { 
+                    console.log(`${type}: Lobby status:`, { 
                         currentStatus, 
                         gameType, 
                         currentPlayerCount,
                         lastPlayerCount,
-                        isMobile: window.innerWidth <= 768
+                        isMobile: isMobile
                     });
                     
                     if (currentStatus === 'playing') {
                         redirectInProgress = true;
-                        console.log(`${type} check: Game is playing, initiating redirect...`);
+                        console.log(`${type}: GAME IS PLAYING! Initiating ULTRA-RELIABLE redirect...`);
                         
-                        // Clear all intervals to prevent multiple redirects
+                        // Clear all intervals immediately
                         statusCheckIntervals.forEach(interval => clearInterval(interval));
                         
-                        // Add mobile-specific notification
-                        if (window.innerWidth <= 768) {
+                        // MOBILE: Show immediate notification
+                        if (isMobile) {
                             notifications.info(
-                                'Game Started!',
-                                'The host has started the game. Redirecting you...',
-                                3000
+                                '🎮 Game Started!',
+                                'The host has started the game. Redirecting you NOW...',
+                                2000
                             );
                         }
                         
-                        redirectToGame(gameType, '{{ $lobby->lobby_code }}');
+                        // ULTRA-RELIABLE redirect with multiple attempts
+                        performUltraReliableRedirect(gameType, '{{ $lobby->lobby_code }}');
                         
-                        // Set up fallback timer for manual redirect
+                        // Show manual redirect button after 5 seconds (mobile) or 8 seconds (desktop)
+                        const fallbackDelay = isMobile ? 5000 : 8000;
                         setTimeout(() => {
                             const manualRedirectSection = document.getElementById('manualRedirectSection');
                             if (manualRedirectSection) {
                                 manualRedirectSection.classList.remove('hidden');
                                 console.log('Manual redirect button shown as fallback');
                             }
-                        }, 8000); // Reduced to 8 seconds
+                        }, fallbackDelay);
+                        
                     } else if (currentPlayerCount !== lastPlayerCount) {
                         lastPlayerCount = currentPlayerCount;
-                        console.log(`${type} check: Player count changed, reloading page...`);
+                        console.log(`${type}: Player count changed, reloading page...`);
                         location.reload();
                     }
                 } else {
-                    console.error(`${type} status check failed:`, data.message);
+                    console.error(`${type}: Status check failed:`, data.message);
                     failedChecks++;
                 }
             })
             .catch(error => {
-                console.error(`${type} status check error:`, error);
+                console.error(`${type}: Status check error:`, error);
                 failedChecks++;
                 
-                // If too many failed checks, show manual redirect option
-                if (failedChecks >= maxFailedChecks) {
-                    console.log('Too many failed checks, showing manual redirect option');
+                // Show manual redirect option after fewer failed checks on mobile
+                const maxChecksForManual = isMobile ? 3 : 5;
+                if (failedChecks >= maxChecksForManual) {
+                    console.log(`Too many failed checks (${failedChecks}), showing manual redirect option`);
                     const manualRedirectSection = document.getElementById('manualRedirectSection');
                     if (manualRedirectSection) {
                         manualRedirectSection.classList.remove('hidden');
                     }
                 }
                 
-                if (window.innerWidth <= 768) {
-                    console.log('Mobile device detected, error details:', {
+                if (isMobile) {
+                    console.log('MOBILE ERROR DETAILS:', {
                         error: error.message,
                         lobbyCode: '{{ $lobby->lobby_code }}',
                         userAgent: navigator.userAgent,
-                        failedChecks: failedChecks
+                        failedChecks: failedChecks,
+                        timestamp: new Date().toISOString()
                     });
                 }
             });
+        }
+        
+        // ULTRA-RELIABLE redirect function with multiple fallback methods
+        function performUltraReliableRedirect(gameType, lobbyCode) {
+            console.log('ULTRA-RELIABLE redirect initiated:', { gameType, lobbyCode, isMobile });
+            
+            // ENHANCED URL generation with mobile-specific parameters
+            let redirectUrl;
+            if (gameType === 'custom') {
+                // Add mobile-specific parameters to help with game state loading
+                const mobileParams = isMobile ? '&mobile=1&t=' + Date.now() : '';
+                redirectUrl = `/jeopardy/play-custom?lobby=${lobbyCode}${mobileParams}`;
+            } else {
+                redirectUrl = '/jeopardy/setup';
+            }
+            
+            console.log('Generated redirect URL:', redirectUrl);
+            
+            if (isMobile) {
+                // MOBILE: Multiple redirect attempts with different methods
+                console.log('MOBILE: Using ULTRA-RELIABLE redirect methods');
+                
+                // Method 1: Immediate redirect
+                setTimeout(() => {
+                    console.log('MOBILE: Attempt 1 - window.location.href');
+                    try {
+                        window.location.href = redirectUrl;
+                    } catch (error) {
+                        console.error('MOBILE: Attempt 1 failed:', error);
+                    }
+                }, 1000);
+                
+                // Method 2: window.location.replace
+                setTimeout(() => {
+                    console.log('MOBILE: Attempt 2 - window.location.replace');
+                    try {
+                        window.location.replace(redirectUrl);
+                    } catch (error) {
+                        console.error('MOBILE: Attempt 2 failed:', error);
+                    }
+                }, 2000);
+                
+                // Method 3: window.location.assign
+                setTimeout(() => {
+                    console.log('MOBILE: Attempt 3 - window.location.assign');
+                    try {
+                        window.location.assign(redirectUrl);
+                    } catch (error) {
+                        console.error('MOBILE: Attempt 3 failed:', error);
+                    }
+                }, 3000);
+                
+                // Method 4: Force redirect with window.open
+                setTimeout(() => {
+                    console.log('MOBILE: Attempt 4 - window.open');
+                    try {
+                        window.open(redirectUrl, '_self');
+                    } catch (error) {
+                        console.error('MOBILE: Attempt 4 failed:', error);
+                    }
+                }, 4000);
+                
+                // Method 5: Create and click a link
+                setTimeout(() => {
+                    console.log('MOBILE: Attempt 5 - Create and click link');
+                    try {
+                        const link = document.createElement('a');
+                        link.href = redirectUrl;
+                        link.style.display = 'none';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    } catch (error) {
+                        console.error('MOBILE: Attempt 5 failed:', error);
+                    }
+                }, 5000);
+                
+            } else {
+                // DESKTOP: Standard redirect
+                console.log('DESKTOP: Using standard redirect');
+                window.location.href = redirectUrl;
+            }
         }
 
         // Initialize when page loads
@@ -1338,6 +1517,15 @@
             // Mobile-specific optimizations
             if (window.innerWidth <= 768) {
                 console.log('Mobile device detected, applying mobile optimizations');
+                
+                // Show mobile-specific manual redirect button immediately
+                setTimeout(() => {
+                    const mobileManualRedirectSection = document.getElementById('mobileManualRedirectSection');
+                    if (mobileManualRedirectSection) {
+                        mobileManualRedirectSection.classList.remove('hidden');
+                        console.log('Mobile manual redirect button shown immediately');
+                    }
+                }, 2000); // Show after 2 seconds for mobile users
                 
                 // Add touch event listeners for better mobile interaction
                 const buttons = document.querySelectorAll('button');

@@ -1168,39 +1168,51 @@
                             });
                         } else {
                             console.error('Failed to load fresh game state from lobby');
-                            this.showErrorNotification('Failed to load game state from lobby. Redirecting back to lobby...');
-                            setTimeout(() => {
-                                window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
-                            }, 2000);
+                            console.log('Lobby data received:', lobbyData);
+                            
+                            // MOBILE-FRIENDLY ERROR HANDLING
+                            const isMobile = window.innerWidth <= 768;
+                            if (isMobile) {
+                                console.log('Mobile device detected, using mobile-friendly error handling');
+                                
+                                // Try to get game state from session as fallback
+                                try {
+                                    console.log('Attempting to load game state from session as fallback...');
+                                    const sessionResponse = await fetch('/jeopardy/game-state');
+                                    const sessionData = await sessionResponse.json();
+                                    
+                                    if (sessionData.success && sessionData.game_state) {
+                                        console.log('Successfully loaded game state from session fallback');
+                                        this.gameState = sessionData.game_state;
+                                        this.categories = Object.keys(sessionData.game_state.custom_categories || {});
+                                        
+                                        // Continue with game initialization
+                                        this.initializeGameForLobby();
+                                        return;
+                                    }
+                                } catch (sessionError) {
+                                    console.error('Session fallback also failed:', sessionError);
+                                }
+                                
+                                // If all else fails, show mobile-friendly error and retry
+                                this.showMobileFriendlyError('Game loading failed. Retrying...', () => {
+                                    // Retry loading after 3 seconds
+                                    setTimeout(() => {
+                                        this.loadGameState();
+                                    }, 3000);
+                                });
+                            } else {
+                                // Desktop: Redirect back to lobby
+                                this.showErrorNotification('Failed to load game state from lobby. Redirecting back to lobby...');
+                                setTimeout(() => {
+                                    window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
+                                }, 2000);
+                            }
                             return;
                         }
                         
                         // Initialize game for lobby games
-                        console.log('Initializing game for lobby...');
-                        
-                        // Optimize: Validate DOM elements and initialize game efficiently
-                        if (!this.validateRequiredElements()) {
-                            console.error('Required DOM elements missing, cannot initialize game');
-                            this.showErrorNotification('Game interface not properly loaded. Redirecting back to lobby...');
-                            setTimeout(() => {
-                                window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
-                            }, 2000);
-                            return;
-                        }
-                        
-                        // Optimize: Initialize game components in parallel
-                        this.generateTeamCards();
-                        this.createGameBoard();
-                        this.updateDisplay();
-                        
-                        // Optimize: Initialize timer display
-                        const customTimer = this.gameState.custom_question_timer || 30;
-                        this.initializeTimer(customTimer);
-                        
-                        // Optimize: Start real-time synchronization with delay to avoid conflicts
-                        setTimeout(() => {
-                            this.startRealTimeSync();
-                        }, 500);
+                        this.initializeGameForLobby();
                     } else {
                         // For non-lobby games, get from session
                         const response = await fetch('/jeopardy/game-state');
@@ -1303,10 +1315,19 @@
                             // Check if we're in a lobby game
                             if (this.lobbyCode) {
                                 // For lobby games, show error and redirect back to lobby instead of custom game creator
-                                this.showErrorNotification('Failed to load game state. Redirecting back to lobby...');
-                                setTimeout(() => {
-                                    window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
-                                }, 2000);
+                                const isMobile = window.innerWidth <= 768;
+                                if (isMobile) {
+                                    this.showMobileFriendlyError('Failed to load game state. Please try again.', () => {
+                                        setTimeout(() => {
+                                            this.loadGameState();
+                                        }, 2000);
+                                    });
+                                } else {
+                                    this.showErrorNotification('Failed to load game state. Redirecting back to lobby...');
+                                    setTimeout(() => {
+                                        window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
+                                    }, 2000);
+                                }
                             } else {
                                 // For non-lobby games, redirect to custom game creator
                                 this.showErrorNotification('No custom game found. Please create a custom game first.');
@@ -1322,10 +1343,19 @@
                     // Check if we're in a lobby game
                     if (this.lobbyCode) {
                         // For lobby games, redirect back to lobby instead of custom game creator
-                        this.showErrorNotification('Error loading game state. Redirecting back to lobby...');
-                        setTimeout(() => {
-                            window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
-                        }, 2000);
+                        const isMobile = window.innerWidth <= 768;
+                        if (isMobile) {
+                            this.showMobileFriendlyError('Connection error. Please check your internet and try again.', () => {
+                                setTimeout(() => {
+                                    this.loadGameState();
+                                }, 3000);
+                            });
+                        } else {
+                            this.showErrorNotification('Error loading game state. Redirecting back to lobby...');
+                            setTimeout(() => {
+                                window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
+                            }, 2000);
+                        }
                     } else {
                         // For non-lobby games, redirect to custom game creator
                         this.showErrorNotification('Error loading game state. Please try again.');
@@ -3240,6 +3270,69 @@
                 setTimeout(() => {
                     notification.remove();
                 }, 3000);
+            }
+            
+            // MOBILE-FRIENDLY HELPER FUNCTIONS
+            initializeGameForLobby() {
+                console.log('Initializing game for lobby...');
+                
+                // Optimize: Validate DOM elements and initialize game efficiently
+                if (!this.validateRequiredElements()) {
+                    console.error('Required DOM elements missing, cannot initialize game');
+                    this.showErrorNotification('Game interface not properly loaded. Redirecting back to lobby...');
+                    setTimeout(() => {
+                        window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
+                    }, 2000);
+                    return;
+                }
+                
+                // Optimize: Initialize game components in parallel
+                this.generateTeamCards();
+                this.createGameBoard();
+                this.updateDisplay();
+                
+                // Optimize: Initialize timer display
+                const customTimer = this.gameState.custom_question_timer || 30;
+                this.initializeTimer(customTimer);
+                
+                // Optimize: Start real-time synchronization with delay to avoid conflicts
+                setTimeout(() => {
+                    this.startRealTimeSync();
+                }, 500);
+            }
+            
+            showMobileFriendlyError(message, retryCallback) {
+                console.log('Showing mobile-friendly error:', message);
+                
+                // Create a mobile-friendly error notification
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75';
+                errorDiv.innerHTML = `
+                    <div class="bg-gray-800 rounded-lg p-6 mx-4 max-w-sm w-full text-center">
+                        <div class="text-red-400 text-4xl mb-4">⚠️</div>
+                        <h3 class="text-white font-bold text-lg mb-2">Connection Issue</h3>
+                        <p class="text-gray-300 text-sm mb-4">${message}</p>
+                        <div class="flex space-x-2">
+                            <button onclick="this.parentElement.parentElement.parentElement.remove(); window.location.href='/jeopardy/lobby/${this.lobbyCode}'" 
+                                    class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                Back to Lobby
+                            </button>
+                            <button onclick="this.parentElement.parentElement.parentElement.remove(); ${retryCallback ? 'setTimeout(() => { window.customJeopardyGame.loadGameState(); }, 1000);' : ''}" 
+                                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                Retry
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(errorDiv);
+                
+                // Auto-remove after 10 seconds
+                setTimeout(() => {
+                    if (errorDiv.parentElement) {
+                        errorDiv.remove();
+                    }
+                }, 10000);
             }
         }
 
