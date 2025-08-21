@@ -1293,6 +1293,9 @@
                                 return;
                             }
                             
+                            // Validate game state first
+                            this.validateGameState();
+                            
                             // Optimize: Initialize game components in parallel
                             this.generateTeamCards();
                             this.createGameBoard();
@@ -1407,6 +1410,8 @@
                     const data = await response.json();
                     
                     if (data.success && data.game_state) {
+                        // Validate game state before updating
+                        this.validateGameState();
                         // Optimize: Only update if there are meaningful changes
                         this.updateLocalGameState(data.game_state);
                     }
@@ -1416,6 +1421,20 @@
             }
 
             updateLocalGameState(newGameState) {
+                // Validate the new game state first
+                if (newGameState && newGameState.team_count) {
+                    for (let i = 1; i <= newGameState.team_count; i++) {
+                        if (!newGameState[`team${i}`]) {
+                            console.warn(`Team ${i} missing from synced game state, creating default team`);
+                            newGameState[`team${i}`] = {
+                                name: `Team ${i}`,
+                                score: 0,
+                                timer: newGameState.custom_game_timer || 300
+                            };
+                        }
+                    }
+                }
+                
                 // Only update if there are meaningful changes
                 if (JSON.stringify(this.gameState) !== JSON.stringify(newGameState)) {
                     const oldGameState = this.gameState;
@@ -2556,6 +2575,15 @@
                         // Show player name if available
                         const currentPlayerId = this.gameState.current_player_id;
                         const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                        
+                        // Debug logging
+                        console.log('Turn indicator debug:', {
+                            currentTeam: this.gameState.current_team,
+                            currentTeamData: currentTeam,
+                            currentPlayerId: currentPlayerId,
+                            teamCount: this.gameState.team_count
+                        });
+                        
                         if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>🎯 ${currentTeam.name}'s Turn!</span>`;
                         } else if (currentPlayerId) {
@@ -2569,6 +2597,15 @@
                     } else {
                         turnIndicator.classList.remove('hidden');
                         const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                        
+                        // Debug logging
+                        console.log('Other player turn debug:', {
+                            currentTeam: this.gameState.current_team,
+                            currentTeamData: currentTeam,
+                            currentPlayerId: this.gameState.current_player_id,
+                            teamCount: this.gameState.team_count
+                        });
+                        
                         // Show player name if available, otherwise show team name
                         if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>⏳ ${currentTeam.name}'s Turn</span>`;
@@ -2577,7 +2614,9 @@
                             if (currentPlayerId) {
                                 turnIndicator.innerHTML = `<span>⏳ Player ${currentPlayerId}'s Turn</span>`;
                             } else {
-                                turnIndicator.innerHTML = `<span>⏳ Team ${this.gameState.current_team}'s Turn</span>`;
+                                // Fallback to team number if team data is missing
+                                const teamNumber = this.gameState.current_team || 'Unknown';
+                                turnIndicator.innerHTML = `<span>⏳ Team ${teamNumber}'s Turn</span>`;
                             }
                         }
                         turnIndicator.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
@@ -3136,6 +3175,36 @@
             }
 
             // Host observer mode removed - host can now participate in the game
+            
+            validateGameState() {
+                // Ensure all teams exist in the game state
+                if (this.gameState && this.gameState.team_count) {
+                    for (let i = 1; i <= this.gameState.team_count; i++) {
+                        if (!this.gameState[`team${i}`]) {
+                            console.warn(`Team ${i} missing from game state, creating default team`);
+                            this.gameState[`team${i}`] = {
+                                name: `Team ${i}`,
+                                score: 0,
+                                timer: this.gameState.custom_game_timer || 300
+                            };
+                        }
+                    }
+                }
+                
+                // Ensure current_team is valid
+                if (this.gameState && this.gameState.current_team) {
+                    if (this.gameState.current_team > this.gameState.team_count) {
+                        console.warn(`Current team ${this.gameState.current_team} exceeds team count ${this.gameState.team_count}, resetting to 1`);
+                        this.gameState.current_team = 1;
+                    }
+                }
+                
+                console.log('Game state validation complete:', {
+                    teamCount: this.gameState?.team_count,
+                    currentTeam: this.gameState?.current_team,
+                    teams: this.gameState ? Object.keys(this.gameState).filter(key => key.startsWith('team')) : []
+                });
+            }
 
             validateRequiredElements() {
                 const requiredElements = [

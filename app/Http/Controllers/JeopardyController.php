@@ -223,8 +223,8 @@ class JeopardyController extends Controller
         $gameTimer = $settings['game_timer'] ?? 300;
         $questionTimer = $settings['question_timer'] ?? 30;
         
-        // Calculate team count based on actual players in lobby (excluding host)
-        $teamCount = count($players) - 1; // Subtract 1 for host
+        // Calculate team count based on all players in lobby (including host)
+        $teamCount = count($players);
         if ($teamCount < 1) {
             $teamCount = 1; // Minimum 1 team
         }
@@ -234,11 +234,11 @@ class JeopardyController extends Controller
         $playerIds = [];
         $teamColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
         
-        // Skip the first player (host) and use all other players
-        for ($i = 1; $i < count($players); $i++) {
+        // Include all players including host
+        for ($i = 0; $i < count($players); $i++) {
             if (isset($players[$i])) {
                 $finalTeamNames[] = $players[$i]['name'];
-                $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1); // Ensure IDs start from 002
+                $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1); // Ensure IDs start from 001
             }
         }
         
@@ -246,7 +246,7 @@ class JeopardyController extends Controller
         $gameState = [
             'team_count' => $teamCount,
             'current_team' => 1,
-            'current_player_id' => $playerIds[0] ?? '002', // Start with first actual player (not host)
+            'current_player_id' => $playerIds[0] ?? '001', // Start with first player (host)
             'player_ids' => $playerIds,
             'question_timer' => $questionTimer,
             'current_question' => null,
@@ -267,7 +267,7 @@ class JeopardyController extends Controller
             $gameState['team' . $i] = [
                 'name' => $finalTeamNames[$i - 1] ?? "Team $i",
                 'score' => 0,
-                'color' => $teamColors[$i - 1],
+                'color' => $teamColors[$i - 1] ?? '#3B82F6',
                 'timer' => $gameTimer
             ];
         }
