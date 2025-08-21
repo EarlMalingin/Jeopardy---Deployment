@@ -913,6 +913,24 @@
             transition: all 0.3s ease !important;
             box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3) !important;
         }
+
+        /* Timer styling */
+        .timer-container {
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+        }
+
+        #timerDisplay {
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .pulse-glow {
+            animation: pulseGlow 2s ease-in-out infinite alternate;
+        }
+        
+        @keyframes pulseGlow {
+            from { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+            to { box-shadow: 0 0 30px rgba(59, 130, 246, 0.8); }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white min-h-screen">
@@ -966,12 +984,9 @@
                     <!-- Question Timer -->
                     <div class="flex flex-col items-center timer-container ml-4 sm:ml-6">
                         <div class="relative">
-                            <svg class="w-12 h-12 sm:w-16 sm:h-16 transform -rotate-90">
-                                <circle cx="24" cy="24" r="20" stroke="#374151" stroke-width="3" fill="none"/>
-                                <circle id="timerRing" cx="24" cy="24" r="20" stroke="#10b981" stroke-width="3" fill="none"/>
-                            </svg>
-                            <div class="absolute inset-0 flex items-center justify-center">
-                                <span id="timerDisplay" class="text-sm sm:text-xl font-bold text-white">30</span>
+                            <div id="timerProgress" class="absolute -inset-1 rounded-full border-2 border-green-500" style="background: conic-gradient(from 0deg, #10b981 0deg, transparent 0deg);"></div>
+                            <div class="w-10 h-10 sm:w-12 sm:h-12 bg-gray-700 rounded-full flex items-center justify-center relative z-10">
+                                <span id="timerDisplay" class="text-sm sm:text-base font-bold text-white">30</span>
                             </div>
                         </div>
                         <p class="text-xs sm:text-sm text-gray-400 mt-1 sm:mt-2">Timer</p>
@@ -1046,6 +1061,7 @@
                     this.isSubmittingAnswer = false; // Flag to prevent multiple answer submissions
                     this.isAnsweringQuestion = false; // Flag to track when user is actively answering
                     this.hasSelectedQuestion = false; // Flag to track if current player selected the question
+                    this.isAdvancingTurn = false; // Flag to prevent multiple turn advancements
                     
                     // Clear any old session storage data
                     this.clearOldGameData();
@@ -1173,7 +1189,7 @@
                         
                         // Optimize: Initialize timer display
                         const customTimer = this.gameState.custom_question_timer || 30;
-                        this.updateTimerDisplay(customTimer);
+                        this.initializeTimer(customTimer);
                         
                         // Optimize: Start real-time synchronization with delay to avoid conflicts
                         setTimeout(() => {
@@ -1269,7 +1285,7 @@
                             
                             // Optimize: Initialize timer display
                             const customTimer = data.game_state.custom_question_timer || 30;
-                            this.updateTimerDisplay(customTimer);
+                            this.initializeTimer(customTimer);
                             
                             // Optimize: Start real-time synchronization with delay to avoid conflicts
                             setTimeout(() => {
@@ -1383,10 +1399,14 @@
                          if (newGameState.current_question.selected && !newGameState.current_question.question) {
                              // This is a simplified question from other players - highlight the cell and show timer
                              this.highlightSelectedQuestion(newGameState.current_question);
-                             // Start timer for other players to see the countdown
-                             if (newGameState.question_timer) {
-                                 this.startTimerForOtherPlayers(newGameState.question_timer);
-                             }
+                                                         // Start timer for other players to see the countdown
+                            if (newGameState.question_timer) {
+                                this.startTimerForOtherPlayers(newGameState.question_timer);
+                            } else {
+                                // Use custom question timer if no specific timer provided
+                                const customTimer = this.gameState.custom_question_timer || 30;
+                                this.startTimerForOtherPlayers(customTimer);
+                            }
                              
                              // Show a read-only question modal for other players showing which question was selected
                              this.showQuestionForOtherPlayers(newGameState.current_question, newGameState.current_team);
@@ -1793,7 +1813,7 @@
                          console.log('Question shown successfully');
                         
                         console.log('About to start timer...');
-                        this.startTimer(data.timer);
+                        this.startTimer(data.timer || this.gameState.custom_question_timer || 30);
                         console.log('Timer started successfully');
                         
                         console.log('About to start team timer...');
@@ -1968,7 +1988,7 @@
                         clearInterval(this.timerInterval);
                     }
                     
-                    let timeLeft = duration || 30;
+                    let timeLeft = duration || (this.gameState && this.gameState.custom_question_timer ? this.gameState.custom_question_timer : 30);
                     console.log('Initial time left for other players:', timeLeft);
                     
                     console.log('Updating timer display for other players');
@@ -2020,7 +2040,7 @@
                         clearInterval(this.timerInterval);
                     }
                     
-                    let timeLeft = duration || 30;
+                    let timeLeft = duration || (this.gameState && this.gameState.custom_question_timer ? this.gameState.custom_question_timer : 30);
                     console.log('Initial time left:', timeLeft);
                     
                     console.log('Updating timer display');
@@ -2122,28 +2142,48 @@
                 }, 1000);
             }
 
+            initializeTimer(maxTimer) {
+                const timerProgress = document.getElementById('timerProgress');
+                const timerDisplay = document.getElementById('timerDisplay');
+                const timerContainer = timerProgress.parentElement;
+                
+                // Show full circle (no countdown)
+                timerProgress.style.background = `conic-gradient(from 0deg, #10b981 0deg, #10b981 360deg)`;
+                timerContainer.classList.remove('pulse-glow');
+                
+                // Show max time
+                timerDisplay.textContent = maxTimer;
+            }
+
             updateTimerDisplay(timeLeft) {
+                // Ensure timeLeft is not negative
                 timeLeft = Math.max(0, timeLeft);
+                
                 document.getElementById('timerDisplay').textContent = timeLeft;
                 
+                // Get the maximum timer value (custom or default 30)
                 const maxTimer = this.gameState && this.gameState.custom_question_timer ? this.gameState.custom_question_timer : 30;
-                const circumference = 2 * Math.PI * 20; // Adjusted for smaller mobile timer
                 const percentage = (timeLeft / maxTimer) * 100;
-                const offset = circumference - (percentage / 100) * circumference;
                 
-                document.getElementById('timerRing').style.strokeDashoffset = offset;
+                // Calculate the angle for the conic gradient (360 degrees = full circle)
+                const angle = (percentage / 100) * 360;
                 
-                const timerRing = document.getElementById('timerRing');
-                // Adjust color thresholds based on custom timer
-                const warningThreshold = Math.max(3, Math.floor(maxTimer * 0.33)); // 33% of timer
-                const dangerThreshold = Math.max(1, Math.floor(maxTimer * 0.1)); // 10% of timer
+                const timerProgress = document.getElementById('timerProgress');
+                const timerContainer = timerProgress.parentElement;
                 
-                if (timeLeft <= dangerThreshold) {
-                    timerRing.style.stroke = '#ef4444';
-                } else if (timeLeft <= warningThreshold) {
-                    timerRing.style.stroke = '#f59e0b';
+                // Update the conic gradient
+                timerProgress.style.background = `conic-gradient(from 0deg, #10b981 0deg, #10b981 ${angle}deg, transparent ${angle}deg, transparent 360deg)`;
+                
+                // Change color based on time
+                if (timeLeft <= 10) {
+                    timerProgress.style.background = `conic-gradient(from 0deg, #ef4444 0deg, #ef4444 ${angle}deg, transparent ${angle}deg, transparent 360deg)`;
+                    timerContainer.classList.add('pulse-glow');
+                } else if (timeLeft <= 20) {
+                    timerProgress.style.background = `conic-gradient(from 0deg, #f59e0b 0deg, #f59e0b ${angle}deg, transparent ${angle}deg, transparent 360deg)`;
+                    timerContainer.classList.remove('pulse-glow');
                 } else {
-                    timerRing.style.stroke = '#10b981';
+                    timerProgress.style.background = `conic-gradient(from 0deg, #10b981 0deg, #10b981 ${angle}deg, transparent ${angle}deg, transparent 360deg)`;
+                    timerContainer.classList.remove('pulse-glow');
                 }
             }
 
@@ -2214,7 +2254,7 @@
                 const maxTimer = this.gameState && this.gameState.custom_question_timer ? this.gameState.custom_question_timer : 30;
                 const timeTaken = maxTimer - parseInt(document.getElementById('timerDisplay').textContent);
                 
-                this.updateTimerDisplay(maxTimer);
+                this.initializeTimer(maxTimer);
                 
                 const answer = document.getElementById('answerInput').value;
                 
@@ -2273,6 +2313,11 @@
                             this.syncGameState();
                         }, 500);
                         
+                        // Always advance to next team's turn after answering (correct or incorrect)
+                        setTimeout(() => {
+                            this.advanceToNextTeam();
+                        }, 3000); // Wait 3 seconds to show the answer result, then advance turn
+                        
                         if (this.gameState.game_over) {
                             this.showGameOver();
                         }
@@ -2289,6 +2334,78 @@
                  }
             }
 
+            async advanceToNextTeam() {
+                // Prevent multiple rapid turn advancements
+                if (this.isAdvancingTurn) {
+                    console.log('Turn advancement already in progress, skipping...');
+                    return;
+                }
+                
+                this.isAdvancingTurn = true;
+                
+                try {
+                    // Get current team's timer before advancing
+                    const currentTeam = 'team' + this.gameState.current_team;
+                    const currentTeamTimer = this.gameState[currentTeam].timer;
+                    
+                    console.log('=== TURN ADVANCEMENT DEBUG ===');
+                    console.log('Current team before advancement:', this.gameState.current_team);
+                    console.log('Current team name:', this.gameState[`team${this.gameState.current_team}`].name);
+                    console.log('Total teams in game:', this.gameState.team_count);
+                    console.log('All teams:');
+                    for (let i = 1; i <= this.gameState.team_count; i++) {
+                        const team = this.gameState[`team${i}`];
+                        console.log(`  Team ${i}: ${team.name}`);
+                    }
+                    
+                    // Call the timer endpoint to advance to next team
+                    const response = await fetch('/jeopardy/timer', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        },
+                        body: JSON.stringify({
+                            time_remaining: 0, // Force turn advancement
+                            team_timer: currentTeamTimer
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        console.log('=== TURN ADVANCEMENT RESULT ===');
+                        console.log('Previous team was:', this.gameState.current_team, '(', this.gameState[`team${this.gameState.current_team}`].name, ')');
+                        console.log('New current team:', data.game_state.current_team, '(', data.game_state[`team${data.game_state.current_team}`].name, ')');
+                        console.log('Expected next team should be:', (this.gameState.current_team % this.gameState.team_count) + 1);
+                        
+                        this.gameState = data.game_state;
+                        this.updateDisplay();
+                        this.updateGameBoard();
+                        
+                        // Debug the game state after turn advancement
+                        this.debugGameState();
+                        
+                        // Show notification that turn has advanced
+                        this.showTurnAdvancedNotification();
+                        
+                        // Check for game over
+                        if (this.gameState.game_over) {
+                            this.showGameOver();
+                        }
+                    } else {
+                        console.error('Failed to advance turn:', data);
+                    }
+                } catch (error) {
+                    console.error('Error advancing to next team:', error);
+                } finally {
+                    // Reset the flag after a delay to allow for normal turn advancement
+                    setTimeout(() => {
+                        this.isAdvancingTurn = false;
+                    }, 1000);
+                }
+            }
+
             async timeUp() {
                 if (this.timerInterval) {
                     clearInterval(this.timerInterval);
@@ -2301,43 +2418,19 @@
                 }
                 
                 const maxTimer = this.gameState && this.gameState.custom_question_timer ? this.gameState.custom_question_timer : 30;
-                this.updateTimerDisplay(maxTimer);
+                this.initializeTimer(maxTimer);
                 
                 // Show steal notification when timer runs out
                 this.showStealNotification();
                 
                 this.hideQuestionModal();
                 
-                const failedTeam = this.gameState.current_team;
-                const failedTeamTimer = this.gameState[`team${failedTeam}`].timer;
+                // Use the same turn advancement function to prevent conflicts
+                console.log('Time expired, advancing to next team...');
+                await this.advanceToNextTeam();
                 
-                try {
-                    const response = await fetch('/jeopardy/timer', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                        },
-                        body: JSON.stringify({
-                            time_remaining: 0,
-                            team_timer: failedTeamTimer
-                        })
-                    });
-
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        this.gameState = data.game_state;
-                        this.updateDisplay();
-                        this.updateGameBoard();
-                        
-                        if (this.gameState.game_over) {
-                            this.showGameOver();
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error updating timer:', error);
-                }
+                // Show notification that time's up and next team's turn
+                this.showTimeUpNotification();
             }
 
                          hideQuestionModal() {
@@ -3031,7 +3124,7 @@
                     'questionModal',
                     'submitAnswerBtn',
                     'timerDisplay',
-                    'timerRing',
+                    'timerProgress',
                     'teamsContainer',
                     'gameBoard'
                 ];
@@ -3051,6 +3144,70 @@
                 }
                 
                 return true;
+            }
+
+            // Debug function to check current game state
+            debugGameState() {
+                console.log('=== Current Game State ===');
+                console.log('Current team:', this.gameState.current_team);
+                console.log('Total teams:', this.gameState.team_count);
+                console.log('Teams:');
+                for (let i = 1; i <= this.gameState.team_count; i++) {
+                    const team = this.gameState[`team${i}`];
+                    console.log(`  Team ${i}: ${team.name} (${team.score} pts)`);
+                }
+                console.log('=======================');
+            }
+
+            showTurnAdvancedNotification() {
+                const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                const message = `🎯 ${currentTeam.name}'s turn!`;
+                
+                console.log('Turn advanced to:', currentTeam.name, '(Team', this.gameState.current_team, 'of', this.gameState.team_count, ')');
+                
+                // Create smaller, more subtle notification
+                const notification = document.createElement('div');
+                notification.className = 'mobile-notification bg-blue-600 text-white px-3 py-2 rounded-lg shadow-lg z-50 bounce-in';
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 1rem;
+                    right: 1rem;
+                    left: 1rem;
+                    z-index: 50;
+                    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                    border: 2px solid #60a5fa;
+                    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                    font-weight: 600;
+                    font-size: 0.875rem;
+                    max-width: 300px;
+                    text-align: center;
+                    margin: 0 auto;
+                `;
+                notification.textContent = message;
+                
+                document.body.appendChild(notification);
+                
+                // Remove notification after 2 seconds (shorter duration)
+                setTimeout(() => {
+                    notification.remove();
+                }, 2000);
+            }
+
+            showTimeUpNotification() {
+                const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                const message = `⏰ Time's up! ${currentTeam.name} can now steal the question!`;
+                
+                // Create temporary notification
+                const notification = document.createElement('div');
+                notification.className = 'mobile-notification bg-orange-600 text-white px-4 sm:px-6 py-2 sm:py-4 rounded-lg shadow-lg z-50 bounce-in';
+                notification.textContent = message;
+                
+                document.body.appendChild(notification);
+                
+                // Remove notification after 3 seconds
+                setTimeout(() => {
+                    notification.remove();
+                }, 3000);
             }
         }
 
