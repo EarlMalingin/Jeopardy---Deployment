@@ -490,7 +490,7 @@
                         </div>
                         <h3 class="text-lg font-bold text-white mb-1">{{ $player['name'] }}</h3>
                         @if($player['name'] === $lobby->host_name)
-                        <span class="host-badge text-white text-xs px-2 py-1 rounded-full">Host (Observer)</span>
+                        <span class="host-badge text-white text-xs px-2 py-1 rounded-full">Host</span>
                         @endif
                     </div>
                     @endforeach
@@ -696,7 +696,7 @@
                             </svg>
                             <span class="text-green-400 font-bold">Standard Game Ready!</span>
                         </div>
-                        <p class="text-gray-400 text-sm mt-2">Standard Jeopardy game with predefined categories and questions. Host will be observer.</p>
+                        <p class="text-gray-400 text-sm mt-2">Standard Jeopardy game with predefined categories and questions. Host can participate in the game.</p>
                     </div>
                 </div>
             </div>

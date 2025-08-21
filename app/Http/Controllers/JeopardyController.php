@@ -488,13 +488,13 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host is observer only - assign special team number 0
-                        $playerTeam = 0; // 0 indicates observer/host
-                        Session::put('current_player_team', 0);
-                        Session::put('is_host_observer', true);
+                        // Host can now participate - assign to team 1
+                        $playerTeam = 1;
+                        Session::put('current_player_team', 1);
+                        Session::put('is_host', true);
                         Session::save();
                         
-                        \Log::info("Host assigned as observer (team 0) for session ID {$sessionId}");
+                        \Log::info("Host assigned to team 1 for session ID {$sessionId}");
                         return $playerTeam;
                     }
                     
@@ -508,11 +508,11 @@ class JeopardyController extends Controller
                         // For now, we'll use a simple approach: assign based on session order
                         // In a real implementation, you'd store the player name when they join
                         if ($i === 1) {
-                            $playerTeam = 1;
+                            $playerTeam = 2; // Host is team 1, so non-host players start at team 2
                         } elseif ($i === 2) {
-                            $playerTeam = 2;
+                            $playerTeam = 3;
                         } else {
-                            $playerTeam = min($i, $gameState['team_count']);
+                            $playerTeam = min($i + 1, $gameState['team_count']);
                         }
                         break;
                     }
@@ -527,10 +527,10 @@ class JeopardyController extends Controller
                         } else {
                             // New player - assign to next available team
                             $assignedTeams = array_values($existingPlayers);
-                            $nextTeam = 1;
+                            $nextTeam = 2; // Start from team 2 since host is team 1
                             
-                            // Find the next available team number (skip team 0 which is for host observer)
-                            while (in_array($nextTeam, $assignedTeams) || $nextTeam === 0) {
+                            // Find the next available team number
+                            while (in_array($nextTeam, $assignedTeams)) {
                                 $nextTeam++;
                             }
                             
@@ -662,17 +662,7 @@ class JeopardyController extends Controller
             \Log::info('Player ID: ' . $playerId);
             \Log::info('Session ID: ' . Session::getId());
             
-            // Check if player is host (observer) - this applies to all custom games
-            $isHostObserver = Session::get('is_host_observer', false);
-            if ($isHostObserver) {
-                \Log::info('Turn validation failed: Host cannot participate in gameplay');
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Host is observer only - cannot participate in gameplay',
-                    'current_player_id' => $currentPlayerId,
-                    'player_id' => $playerId
-                ], 403);
-            }
+            // Host can now participate in gameplay - no observer restrictions
             
             // Check if it's this player's turn
             if ($playerId === null) {
@@ -774,17 +764,7 @@ class JeopardyController extends Controller
             return response()->json(['error' => 'No active question'], 400);
         }
 
-        // Check if player is host (observer) - prevent host from answering
-        // This applies to all custom games (both lobby and non-lobby)
-        if (isset($gameState['difficulty']) && $gameState['difficulty'] === 'custom') {
-            $isHostObserver = Session::get('is_host_observer', false);
-            if ($isHostObserver) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Host is observer only - cannot submit answers'
-                ], 403);
-            }
-        }
+        // Host can now submit answers - no observer restrictions
 
         $currentTeam = 'team' . $gameState['current_team'];
         $question = $gameState['current_question'];
@@ -1152,22 +1132,28 @@ class JeopardyController extends Controller
         $existingPlayers = Session::get('lobby_players', []);
         
         // Check if this player is the host
-        $isHost = Session::get('is_host_observer', false) || Session::get('host_session_id') === $sessionId;
+        $isHost = Session::get('host_session_id') === $sessionId;
         
         if ($isHost) {
+            // Host can now participate - assign to team 1
+            $existingPlayers[$sessionId] = 1;
+            Session::put('lobby_players', $existingPlayers);
+            Session::put('current_player_team', 1);
+            Session::save();
+            
             return response()->json([
                 'success' => true,
-                'player_team' => 0,
-                'message' => "Host is observer only - cannot be assigned to a team"
+                'player_team' => 1,
+                'message' => "Host assigned to Team 1"
             ]);
         }
         
-        // For non-host players, assign to available teams (skip team 0 which is for host observer)
+        // For non-host players, assign to available teams (start from team 2 since host is team 1)
         $assignedTeams = array_values($existingPlayers);
-        $nextTeam = 1;
+        $nextTeam = 2;
         
-        // Find the next available team number (skip team 0 which is for host observer)
-        while (in_array($nextTeam, $assignedTeams) || $nextTeam === 0) {
+        // Find the next available team number
+        while (in_array($nextTeam, $assignedTeams)) {
             $nextTeam++;
         }
         
@@ -1548,7 +1534,7 @@ class JeopardyController extends Controller
         Session::put('lobby_created_by_session', $sessionId);
         Session::put('player_name', $request->host_name);
         Session::put('current_player_id', '001');
-        Session::put('is_host_observer', true);
+        Session::put('is_host', true);
         Session::save();
         
         \Log::info("Host session ID stored: {$sessionId} for lobby: {$lobby->lobby_code}");
@@ -1643,8 +1629,8 @@ class JeopardyController extends Controller
         $players = $lobby->players ?? [];
         $playerNames = [];
         
-        // Skip the host (first player) since they're observer
-        for ($i = 1; $i < count($players); $i++) {
+        // Include all players including host since they can now participate
+        for ($i = 0; $i < count($players); $i++) {
             if (isset($players[$i])) {
                 $playerNames[] = $players[$i]['name'];
             }
@@ -1776,13 +1762,13 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host is observer only - assign ID 001
+                        // Host can now participate - assign ID 001
                         $playerId = '001';
                         Session::put('current_player_id', $playerId);
-                        Session::put('is_host_observer', true);
+                        Session::put('is_host', true);
                         Session::save();
                         
-                        \Log::info("Host assigned as observer (ID 001) for session ID {$sessionId}");
+                        \Log::info("Host assigned to participate (ID 001) for session ID {$sessionId}");
                         return $playerId;
                     }
                     
@@ -1829,4 +1815,6 @@ class JeopardyController extends Controller
         
         return $playerId;
     }
+
+
 }

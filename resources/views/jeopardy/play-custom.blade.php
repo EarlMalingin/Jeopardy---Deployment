@@ -959,9 +959,7 @@
                 <div id="turnIndicator" class="text-xs sm:text-sm text-green-400 hidden">
                     <span>🎯 Your Turn!</span>
                 </div>
-                <div id="hostObserverIndicator" class="text-xs sm:text-sm text-purple-400 hidden">
-                    <span>👁️ Observer</span>
-                </div>
+                <!-- Host observer indicator removed - host can now participate -->
                 
                 <a href="/jeopardy" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-1 sm:py-2 px-2 sm:px-4 rounded-lg transition-colors text-sm sm:text-base touch-button">
                     ← Menu
@@ -1266,10 +1264,9 @@
                                 sessionStorage.setItem('playerTeam', data.current_player_team); // Keep for backward compatibility
                                 console.log('Server assigned player ID:', playerId, 'Team:', data.current_player_team);
                                 
-                                // Check if player is host (observer)
-                                if (data.current_player_team === 0 || playerId === '001') {
-                                    console.log('Player is host - observer mode enabled');
-                                    this.enableHostObserverMode();
+                                // Check if player is host
+                                if (playerId === '001') {
+                                    console.log('Player is host - can participate in game');
                                 }
                             } else {
                                 // If no team assigned, try to auto-assign
@@ -2542,65 +2539,50 @@
                 
                 // Update turn indicator
                 const turnIndicator = document.getElementById('turnIndicator');
-                const hostObserverIndicator = document.getElementById('hostObserverIndicator');
                 
-                if (turnIndicator && hostObserverIndicator) {
+                if (turnIndicator) {
                     // Check if this is a single-player game
                     const urlParams = new URLSearchParams(window.location.search);
                     const isSinglePlayer = urlParams.get('mode') === 'singleplayer';
                     
-                    // Check if player is host (observer) - but not for single-player games
-                    const playerTeam = sessionStorage.getItem('playerTeam');
-                    if (playerTeam === '0' && !isSinglePlayer) {
-                        // Host observer mode (only for multiplayer games)
-                        turnIndicator.classList.add('hidden');
-                        hostObserverIndicator.classList.remove('hidden');
-                        hostObserverIndicator.innerHTML = '<span>👁️ Observer Mode - Host cannot participate</span>';
-                        hostObserverIndicator.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%)';
-                        hostObserverIndicator.style.border = '2px solid #c084fc';
-                        hostObserverIndicator.style.boxShadow = '0 0 20px rgba(139, 92, 246, 0.3)';
-                    } else {
-                        // Regular player mode or single-player mode
-                        hostObserverIndicator.classList.add('hidden');
-                        
-                        // For single-player games, ensure we're not in observer mode
-                        if (isSinglePlayer) {
-                            // Set player team to 1 for single-player games
-                            sessionStorage.setItem('playerTeam', '1');
-                        }
-                        if (this.isCurrentPlayerTurn()) {
-                            turnIndicator.classList.remove('hidden');
-                            // Show player name if available
-                            const currentPlayerId = this.gameState.current_player_id;
-                            const currentTeam = this.gameState[`team${this.gameState.current_team}`];
-                            if (currentTeam && currentTeam.name) {
-                                turnIndicator.innerHTML = `<span>🎯 ${currentTeam.name}'s Turn!</span>`;
-                            } else if (currentPlayerId) {
-                                turnIndicator.innerHTML = `<span>🎯 Player ${currentPlayerId}'s Turn!</span>`;
-                            } else {
-                                turnIndicator.innerHTML = '<span>🎯 Your Turn!</span>';
-                            }
-                            turnIndicator.style.background = 'linear-gradient(135deg, #10b981 0%, #34d399 100%)';
-                            turnIndicator.style.border = '2px solid #6ee7b7';
-                            turnIndicator.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.3)';
+                    // For single-player games, ensure we're not in observer mode
+                    if (isSinglePlayer) {
+                        // Set player team to 1 for single-player games
+                        sessionStorage.setItem('playerTeam', '1');
+                    }
+                    
+                    if (this.isCurrentPlayerTurn()) {
+                        turnIndicator.classList.remove('hidden');
+                        // Show player name if available
+                        const currentPlayerId = this.gameState.current_player_id;
+                        const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                        if (currentTeam && currentTeam.name) {
+                            turnIndicator.innerHTML = `<span>🎯 ${currentTeam.name}'s Turn!</span>`;
+                        } else if (currentPlayerId) {
+                            turnIndicator.innerHTML = `<span>🎯 Player ${currentPlayerId}'s Turn!</span>`;
                         } else {
-                            turnIndicator.classList.remove('hidden');
-                            const currentTeam = this.gameState[`team${this.gameState.current_team}`];
-                            // Show player name if available, otherwise show team name
-                            if (currentTeam && currentTeam.name) {
-                                turnIndicator.innerHTML = `<span>⏳ ${currentTeam.name}'s Turn</span>`;
-                            } else {
-                                const currentPlayerId = this.gameState.current_player_id;
-                                if (currentPlayerId) {
-                                    turnIndicator.innerHTML = `<span>⏳ Player ${currentPlayerId}'s Turn</span>`;
-                                } else {
-                                    turnIndicator.innerHTML = `<span>⏳ Team ${this.gameState.current_team}'s Turn</span>`;
-                                }
-                            }
-                            turnIndicator.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
-                            turnIndicator.style.border = '2px solid #fbbf24';
-                            turnIndicator.style.boxShadow = '0 0 20px rgba(245, 158, 11, 0.3)';
+                            turnIndicator.innerHTML = '<span>🎯 Your Turn!</span>';
                         }
+                        turnIndicator.style.background = 'linear-gradient(135deg, #10b981 0%, #34d399 100%)';
+                        turnIndicator.style.border = '2px solid #6ee7b7';
+                        turnIndicator.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.3)';
+                    } else {
+                        turnIndicator.classList.remove('hidden');
+                        const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                        // Show player name if available, otherwise show team name
+                        if (currentTeam && currentTeam.name) {
+                            turnIndicator.innerHTML = `<span>⏳ ${currentTeam.name}'s Turn</span>`;
+                        } else {
+                            const currentPlayerId = this.gameState.current_player_id;
+                            if (currentPlayerId) {
+                                turnIndicator.innerHTML = `<span>⏳ Player ${currentPlayerId}'s Turn</span>`;
+                            } else {
+                                turnIndicator.innerHTML = `<span>⏳ Team ${this.gameState.current_team}'s Turn</span>`;
+                            }
+                        }
+                        turnIndicator.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+                        turnIndicator.style.border = '2px solid #fbbf24';
+                        turnIndicator.style.boxShadow = '0 0 20px rgba(245, 158, 11, 0.3)';
                     }
                 }
                 
@@ -2918,11 +2900,7 @@
                     const playerId = sessionStorage.getItem('playerId');
                     
                     if (playerId) {
-                        // Host (observer) can never have a turn
-                        if (playerId === '001') {
-                            console.log('isCurrentPlayerTurn - Host observer cannot have a turn');
-                            return false;
-                        }
+                        // Host can now participate in the game
                         
                         // Check if there's a current question being answered
                         if (this.gameState.current_question) {
@@ -3157,27 +3135,7 @@
                 };
             }
 
-            enableHostObserverMode() {
-                console.log('Enabling host observer mode');
-                
-                // Disable question selection for host
-                const cells = document.querySelectorAll('[data-category][data-value]');
-                cells.forEach(cell => {
-                    cell.style.cursor = 'not-allowed';
-                    cell.style.opacity = '0.6';
-                    cell.style.pointerEvents = 'none';
-                    cell.title = 'Host cannot participate in gameplay';
-                });
-                
-                // Show observer notification
-                this.showSuccessNotification(
-                    'Observer Mode Enabled',
-                    'As the host, you are in observer mode. You can watch the game but cannot participate.'
-                );
-                
-                // Update the display to show observer mode
-                this.updateDisplay();
-            }
+            // Host observer mode removed - host can now participate in the game
 
             validateRequiredElements() {
                 const requiredElements = [
