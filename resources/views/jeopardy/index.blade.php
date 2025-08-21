@@ -390,7 +390,7 @@
                     <div class="text-center mb-3 sm:mb-4">
                         <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-2 sm:mb-3 overflow-hidden border-2 sm:border-4 border-green-500">
                             <img src="/img/Cinco.jpg" 
-                                 alt="Sarah Chen" 
+                                 alt="Michaela Gayle A. Cinco" 
                                  class="w-full h-full object-cover">
                         </div>
                         <h3 class="text-lg sm:text-xl font-bold text-white mb-1 sm:mb-2">Michaela Gayle A. Cinco</h3>
@@ -413,7 +413,7 @@
                     <div class="text-center mb-3 sm:mb-4">
                         <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-2 sm:mb-3 overflow-hidden border-2 sm:border-4 border-purple-500">
                             <img src="/img/ecal.jpg" 
-                                 alt="Michael Thompson" 
+                                 alt="Mary-Ann P. Ecal" 
                                  class="w-full h-full object-cover">
                         </div>
                         <h3 class="text-lg sm:text-xl font-bold text-white mb-1 sm:mb-2">Mary-Ann P. Ecal</h3>
@@ -435,8 +435,8 @@
                 <div class="bg-gray-700 rounded-xl p-4 sm:p-6 hover:bg-gray-600 transition-colors">
                     <div class="text-center mb-3 sm:mb-4">
                         <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full mx-auto mb-2 sm:mb-3 overflow-hidden border-2 sm:border-4 border-yellow-500">
-                            <img src="/img/talaugon.jpg" 
-                                 alt="Emily Davis" 
+                            <img src="/img/Talaugon.jpg" 
+                                 alt="Christyl Ann Talaugon" 
                                  class="w-full h-full object-cover">
                         </div>
                         <h3 class="text-lg sm:text-xl font-bold text-white mb-1 sm:mb-2">Christyl Ann Talaugon</h3>
