@@ -1168,7 +1168,10 @@
                             });
                         } else {
                             console.error('Failed to load fresh game state from lobby');
-                            this.showErrorNotification('Failed to load game. Please refresh the page.');
+                            this.showErrorNotification('Failed to load game state from lobby. Redirecting back to lobby...');
+                            setTimeout(() => {
+                                window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
+                            }, 2000);
                             return;
                         }
                         
@@ -1178,7 +1181,10 @@
                         // Optimize: Validate DOM elements and initialize game efficiently
                         if (!this.validateRequiredElements()) {
                             console.error('Required DOM elements missing, cannot initialize game');
-                            this.showErrorNotification('Game interface not properly loaded. Please refresh the page.');
+                            this.showErrorNotification('Game interface not properly loaded. Redirecting back to lobby...');
+                            setTimeout(() => {
+                                window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
+                            }, 2000);
                             return;
                         }
                         
@@ -1293,8 +1299,21 @@
                             }, 500);
                         } else {
                             console.error('Invalid game state received:', data);
-                            alert('No custom game found. Please create a custom game first.');
-                            window.location.href = '/jeopardy/custom-game';
+                            
+                            // Check if we're in a lobby game
+                            if (this.lobbyCode) {
+                                // For lobby games, show error and redirect back to lobby instead of custom game creator
+                                this.showErrorNotification('Failed to load game state. Redirecting back to lobby...');
+                                setTimeout(() => {
+                                    window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
+                                }, 2000);
+                            } else {
+                                // For non-lobby games, redirect to custom game creator
+                                this.showErrorNotification('No custom game found. Please create a custom game first.');
+                                setTimeout(() => {
+                                    window.location.href = '/jeopardy/custom-game';
+                                }, 2000);
+                            }
                         }
                     }
                 } catch (error) {
@@ -3224,6 +3243,34 @@
 
         // Initialize the game when the page loads
         document.addEventListener('DOMContentLoaded', () => {
+            // Mobile-specific optimizations
+            if (window.innerWidth <= 768) {
+                console.log('Mobile device detected, applying mobile optimizations');
+                
+                // Prevent zoom on input focus for iOS
+                const inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]');
+                inputs.forEach(input => {
+                    input.addEventListener('focus', function() {
+                        this.style.fontSize = '16px';
+                    });
+                });
+                
+                // Add touch event listeners for better mobile interaction
+                const buttons = document.querySelectorAll('.touch-button, button');
+                buttons.forEach(button => {
+                    button.addEventListener('touchstart', function() {
+                        this.style.transform = 'scale(0.98)';
+                    });
+                    
+                    button.addEventListener('touchend', function() {
+                        this.style.transform = 'scale(1)';
+                    });
+                });
+                
+                // Prevent horizontal scroll on mobile
+                document.body.style.overflowX = 'hidden';
+            }
+            
             // Add global error handler to prevent unexpected exits
             window.addEventListener('error', function(event) {
                 console.error('Global error caught:', event.error);
@@ -3273,6 +3320,15 @@
                 if (window.customJeopardyGame && window.customJeopardyGame.categories && window.customJeopardyGame.categories.length > 0) {
                     window.customJeopardyGame.applyResponsiveGameBoardClasses();
                 }
+            });
+            
+            // Handle orientation changes for mobile
+            window.addEventListener('orientationchange', () => {
+                setTimeout(() => {
+                    if (window.innerWidth <= 768) {
+                        document.body.style.overflowX = 'hidden';
+                    }
+                }, 500);
             });
         });
     </script>

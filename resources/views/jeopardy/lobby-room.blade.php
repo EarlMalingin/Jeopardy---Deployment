@@ -87,6 +87,65 @@
         .copy-button.copied {
             background: #10b981 !important;
         }
+        
+        /* Mobile-specific improvements for lobby room */
+        @media (max-width: 768px) {
+            /* Prevent horizontal scroll */
+            body {
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            /* Improve button touch targets */
+            button {
+                min-height: 44px !important;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+            
+            /* Improve input fields */
+            input {
+                font-size: 16px !important; /* Prevent zoom on iOS */
+                min-height: 44px !important;
+            }
+            
+            /* Improve modal responsiveness */
+            .modal-content {
+                max-width: 95vw !important;
+                margin: 0.5rem !important;
+                padding: 1rem !important;
+            }
+            
+            /* Better spacing for mobile */
+            .space-y-4 > * + * {
+                margin-top: 1rem !important;
+            }
+            
+            /* Improve text readability */
+            .text-sm {
+                font-size: 0.875rem !important;
+            }
+            
+            .text-lg {
+                font-size: 1.125rem !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            /* Even smaller screens */
+            .text-2xl {
+                font-size: 1.5rem !important;
+            }
+            
+            .text-xl {
+                font-size: 1.25rem !important;
+            }
+            
+            button {
+                min-height: 48px !important;
+                font-size: 1rem !important;
+            }
+        }
 
         /* Beautiful Enhanced Notification System */
         .notification-container {
@@ -938,7 +997,7 @@
                                     3000
                                 );
                                 setTimeout(() => {
-                                    window.location.href = '/jeopardy/play-custom?lobby={{ $lobby->lobby_code }}';
+                                    redirectToGame('custom', '{{ $lobby->lobby_code }}');
                                 }, 1500);
                             } else {
                                 notifications.error(
@@ -1000,7 +1059,7 @@
                                 3000
                             );
                             setTimeout(() => {
-                                window.location.href = '/jeopardy/setup';
+                                redirectToGame('standard', '{{ $lobby->lobby_code }}');
                             }, 1500);
                         } else {
                             notifications.error(
@@ -1022,9 +1081,49 @@
             }
         }
 
+        // Mobile-friendly redirect function
+        function redirectToGame(gameType, lobbyCode) {
+            console.log('Redirecting to game:', { gameType, lobbyCode });
+            
+            // Add mobile-specific delay and user feedback
+            if (window.innerWidth <= 768) {
+                notifications.info(
+                    'Game Starting!',
+                    'Redirecting you to the game...',
+                    2000
+                );
+                
+                // Use a longer delay for mobile to ensure proper loading
+                setTimeout(() => {
+                    if (gameType === 'custom') {
+                        console.log('Redirecting to custom game:', `/jeopardy/play-custom?lobby=${lobbyCode}`);
+                        window.location.href = `/jeopardy/play-custom?lobby=${lobbyCode}`;
+                    } else {
+                        console.log('Redirecting to standard game setup');
+                        window.location.href = '/jeopardy/setup';
+                    }
+                }, 2500);
+            } else {
+                // Desktop redirect (faster)
+                if (gameType === 'custom') {
+                    window.location.href = `/jeopardy/play-custom?lobby=${lobbyCode}`;
+                } else {
+                    window.location.href = '/jeopardy/setup';
+                }
+            }
+        }
+        
         // Auto-refresh lobby every 5 seconds and redirect if game started
         let lastPlayerCount = {{ count($lobby->players) }};
+        let redirectInProgress = false; // Prevent multiple redirects
+        
         setInterval(() => {
+            // Prevent multiple simultaneous redirects
+            if (redirectInProgress) {
+                console.log('Redirect already in progress, skipping status check');
+                return;
+            }
+            
             // Check current lobby status via AJAX
             fetch('/jeopardy/lobby/{{ $lobby->lobby_code }}/status', {
                 method: 'GET',
@@ -1033,24 +1132,28 @@
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 }
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     const currentStatus = data.lobby.status;
                     const gameType = data.lobby.game_settings?.game_type || 'standard';
                     const currentPlayerCount = data.lobby.players?.length || 0;
                     
+                    console.log('Lobby status check:', { currentStatus, gameType, currentPlayerCount });
+                    
                     if (currentStatus === 'playing') {
-                        if (gameType === 'custom') {
-                            // Redirect to custom game
-                            window.location.href = '/jeopardy/play-custom?lobby={{ $lobby->lobby_code }}';
-                        } else {
-                            // Redirect to standard game setup
-                            window.location.href = '/jeopardy/setup';
-                        }
+                        redirectInProgress = true;
+                        console.log('Game is playing, initiating redirect...');
+                        redirectToGame(gameType, '{{ $lobby->lobby_code }}');
                     } else if (currentPlayerCount !== lastPlayerCount) {
                         // Only refresh if player count has changed
                         lastPlayerCount = currentPlayerCount;
+                        console.log('Player count changed, reloading page...');
                         location.reload();
                     }
                 }
@@ -1070,19 +1173,9 @@
             const gameType = '{{ $lobby->game_settings["game_type"] ?? "standard" }}';
             
             if (currentStatus === 'playing') {
-                notifications.info(
-                    'Game Started!',
-                    'The host has started the game. Redirecting you to the game...',
-                    3000
-                );
-                
-                setTimeout(() => {
-                    if (gameType === 'custom') {
-                        window.location.href = '/jeopardy/play-custom?lobby={{ $lobby->lobby_code }}';
-                    } else {
-                        window.location.href = '/jeopardy/setup';
-                    }
-                }, 2000);
+                console.log('Game already started, redirecting immediately...');
+                redirectInProgress = true;
+                redirectToGame(gameType, '{{ $lobby->lobby_code }}');
                 return;
             }
             
@@ -1094,6 +1187,31 @@
                     4000
                 );
             }, 1000);
+            
+            // Mobile-specific optimizations
+            if (window.innerWidth <= 768) {
+                console.log('Mobile device detected, applying mobile optimizations');
+                
+                // Add touch event listeners for better mobile interaction
+                const buttons = document.querySelectorAll('button');
+                buttons.forEach(button => {
+                    button.addEventListener('touchstart', function() {
+                        this.style.transform = 'scale(0.98)';
+                    });
+                    
+                    button.addEventListener('touchend', function() {
+                        this.style.transform = 'scale(1)';
+                    });
+                });
+                
+                // Prevent zoom on input focus for iOS
+                const inputs = document.querySelectorAll('input');
+                inputs.forEach(input => {
+                    input.addEventListener('focus', function() {
+                        this.style.fontSize = '16px';
+                    });
+                });
+            }
         });
     </script>
 </body>

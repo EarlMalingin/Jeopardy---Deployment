@@ -240,6 +240,133 @@
         .popup-button:active {
             transform: translateY(0);
         }
+        
+        /* Mobile-specific improvements for lobby modals */
+        @media (max-width: 768px) {
+            /* Modal improvements for mobile */
+            .modal-mobile {
+                padding: 1rem !important;
+                margin: 0.5rem !important;
+                max-height: 90vh !important;
+                overflow-y: auto !important;
+            }
+            
+            /* Input field improvements for mobile */
+            .mobile-input {
+                font-size: 16px !important; /* Prevent zoom on iOS */
+                padding: 0.75rem !important;
+                min-height: 44px !important; /* Minimum touch target */
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+            
+            /* Button improvements for mobile */
+            .mobile-button {
+                min-height: 44px !important;
+                font-size: 1rem !important;
+                padding: 0.75rem 1rem !important;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+            
+            /* Modal content improvements */
+            .modal-content-mobile {
+                max-width: 95vw !important;
+                width: 95vw !important;
+                margin: 0.25rem !important;
+            }
+            
+            /* Form spacing improvements */
+            .mobile-form-space {
+                gap: 1rem !important;
+            }
+            
+            /* Text improvements for mobile */
+            .mobile-text {
+                font-size: 0.875rem !important;
+                line-height: 1.4 !important;
+            }
+            
+            .mobile-title {
+                font-size: 1.5rem !important;
+                margin-bottom: 0.75rem !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .modal-mobile {
+                padding: 0.75rem !important;
+                margin: 0.25rem !important;
+                max-height: 95vh !important;
+            }
+            
+            .mobile-input {
+                font-size: 16px !important;
+                padding: 0.5rem !important;
+                min-height: 40px !important;
+            }
+            
+            .mobile-button {
+                min-height: 40px !important;
+                font-size: 0.875rem !important;
+                padding: 0.5rem 0.75rem !important;
+            }
+            
+            .mobile-title {
+                font-size: 1.25rem !important;
+                margin-bottom: 0.5rem !important;
+            }
+            
+            .mobile-text {
+                font-size: 0.75rem !important;
+            }
+        }
+        
+        /* Prevent horizontal scroll on mobile */
+        @media (max-width: 768px) {
+            body {
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            .main-container {
+                overflow-x: hidden;
+            }
+        }
+        
+        /* Touch-friendly improvements */
+        .touch-button {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        
+        /* Better error handling for mobile */
+        .mobile-error {
+            position: fixed;
+            top: 1rem;
+            left: 1rem;
+            right: 1rem;
+            z-index: 10000;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            font-weight: 600;
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);
+            animation: slideInDown 0.3s ease-out;
+        }
+        
+        @keyframes slideInDown {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white main-container">
@@ -304,7 +431,7 @@
             <!-- Lobby Options -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
                 <!-- Create Lobby -->
-                <div class="lobby-button rounded-2xl p-6 text-center cursor-pointer" onclick="showCreateLobby()">
+                <div class="lobby-button rounded-2xl p-6 text-center cursor-pointer touch-button" onclick="showCreateLobby()">
                     <div class="text-5xl mb-4 flex justify-center">
                         <div class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
                             <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -317,7 +444,7 @@
                 </div>
 
                 <!-- Create Custom Game -->
-                <div class="lobby-button rounded-2xl p-6 text-center cursor-pointer" onclick="createCustomGame()">
+                <div class="lobby-button rounded-2xl p-6 text-center cursor-pointer touch-button" onclick="createCustomGame()">
                     <div class="text-5xl mb-4 flex justify-center">
                         <div class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
                             <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -330,7 +457,7 @@
                 </div>
 
                 <!-- Join Lobby -->
-                <div class="lobby-button rounded-2xl p-6 text-center cursor-pointer" onclick="showJoinLobby()">
+                <div class="lobby-button rounded-2xl p-6 text-center cursor-pointer touch-button" onclick="showJoinLobby()">
                     <div class="text-5xl mb-4 flex justify-center">
                         <div class="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
                             <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -355,33 +482,35 @@
     <!-- Create Lobby Modal -->
     <div id="createLobbyModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black bg-opacity-75"></div>
-        <div class="relative bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4">
+        <div class="relative bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4 modal-mobile modal-content-mobile">
             <div class="text-center mb-6">
-                <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-4">
+                <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-4 mobile-title">
                     🏗️ Create Lobby
                 </h2>
-                <p class="text-gray-300">Set up your lobby and invite others to join</p>
+                <p class="text-gray-300 mobile-text">Set up your lobby and invite others to join</p>
             </div>
             
-            <form id="createLobbyForm" class="space-y-4">
+            <form id="createLobbyForm" class="space-y-4 mobile-form-space">
                 <div>
-                    <label for="hostName" class="block text-sm font-medium text-gray-300 mb-2">Your Name</label>
+                    <label for="hostName" class="block text-sm font-medium text-gray-300 mb-2 mobile-text">Your Name</label>
                     <input 
                         type="text" 
                         id="hostName" 
                         name="hostName" 
-                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input touch-button"
                         placeholder="Enter your name"
                         required
+                        autocomplete="off"
+                        autocorrect="off"
                     >
                 </div>
                 
                 <div>
-                    <label for="gameType" class="block text-sm font-medium text-gray-300 mb-2">Game Type</label>
+                    <label for="gameType" class="block text-sm font-medium text-gray-300 mb-2 mobile-text">Game Type</label>
                     <select 
                         id="gameType" 
                         name="gameType" 
-                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input touch-button"
                         required
                     >
                         <option value="custom">Custom Game</option>
@@ -394,13 +523,13 @@
                     <button 
                         type="button" 
                         onclick="hideCreateLobby()" 
-                        class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                        class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors mobile-button touch-button"
                     >
                         Cancel
                     </button>
                     <button 
                         type="submit" 
-                        class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                        class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors mobile-button touch-button"
                     >
                         Create Lobby
                     </button>
@@ -412,38 +541,43 @@
     <!-- Join Lobby Modal -->
     <div id="joinLobbyModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black bg-opacity-75"></div>
-        <div class="relative bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4">
+        <div class="relative bg-gray-800 rounded-2xl p-8 max-w-md w-full mx-4 modal-mobile modal-content-mobile">
             <div class="text-center mb-6">
-                <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-4">
+                <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-4 mobile-title">
                     🚪 Join Lobby
                 </h2>
-                <p class="text-gray-300">Enter the lobby code and your name to join</p>
+                <p class="text-gray-300 mobile-text">Enter the lobby code and your name to join</p>
             </div>
             
-            <form id="joinLobbyForm" class="space-y-4">
+            <form id="joinLobbyForm" class="space-y-4 mobile-form-space">
                 <div>
-                    <label for="lobbyCode" class="block text-sm font-medium text-gray-300 mb-2">Lobby Code</label>
+                    <label for="lobbyCode" class="block text-sm font-medium text-gray-300 mb-2 mobile-text">Lobby Code</label>
                     <input 
                         type="text" 
                         id="lobbyCode" 
                         name="lobbyCode" 
-                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input touch-button"
                         placeholder="Enter 6-digit code"
                         maxlength="6"
                         pattern="[A-Za-z0-9]{6}"
                         required
+                        autocomplete="off"
+                        autocorrect="off"
+                        autocapitalize="characters"
                     >
                 </div>
                 
                 <div>
-                    <label for="playerName" class="block text-sm font-medium text-gray-300 mb-2">Your Name</label>
+                    <label for="playerName" class="block text-sm font-medium text-gray-300 mb-2 mobile-text">Your Name</label>
                     <input 
                         type="text" 
                         id="playerName" 
                         name="playerName" 
-                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mobile-input touch-button"
                         placeholder="Enter your name"
                         required
+                        autocomplete="off"
+                        autocorrect="off"
                     >
                 </div>
                 
@@ -451,13 +585,13 @@
                     <button 
                         type="button" 
                         onclick="hideJoinLobby()" 
-                        class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                        class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors mobile-button touch-button"
                     >
                         Cancel
                     </button>
                     <button 
                         type="submit" 
-                        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors mobile-button touch-button"
                     >
                         Join Game
                     </button>
@@ -484,22 +618,52 @@
 
         function showCreateLobby() {
             document.getElementById('createLobbyModal').classList.remove('hidden');
-            document.getElementById('hostName').focus();
+            // Add mobile-friendly focus with delay
+            setTimeout(() => {
+                const hostNameInput = document.getElementById('hostName');
+                if (hostNameInput) {
+                    hostNameInput.focus();
+                    // Scroll to input on mobile if needed
+                    if (window.innerWidth <= 768) {
+                        hostNameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            }, 100);
         }
 
         function hideCreateLobby() {
             document.getElementById('createLobbyModal').classList.add('hidden');
             document.getElementById('createLobbyForm').reset();
+            // Clear any mobile errors when hiding
+            const existingError = document.querySelector('.mobile-error');
+            if (existingError) {
+                existingError.remove();
+            }
         }
 
         function showJoinLobby() {
             document.getElementById('joinLobbyModal').classList.remove('hidden');
-            document.getElementById('lobbyCode').focus();
+            // Add mobile-friendly focus with delay
+            setTimeout(() => {
+                const lobbyCodeInput = document.getElementById('lobbyCode');
+                if (lobbyCodeInput) {
+                    lobbyCodeInput.focus();
+                    // Scroll to input on mobile if needed
+                    if (window.innerWidth <= 768) {
+                        lobbyCodeInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            }, 100);
         }
 
         function hideJoinLobby() {
             document.getElementById('joinLobbyModal').classList.add('hidden');
             document.getElementById('joinLobbyForm').reset();
+            // Clear any mobile errors when hiding
+            const existingError = document.querySelector('.mobile-error');
+            if (existingError) {
+                existingError.remove();
+            }
         }
 
         function createCustomGame() {
@@ -533,8 +697,19 @@
             const hostName = document.getElementById('hostName').value.trim();
             const gameType = document.getElementById('gameType').value;
             
+            // Mobile-friendly validation
             if (!hostName) {
-                alert('Please enter your name');
+                showMobileError('Please enter your name');
+                return;
+            }
+            
+            if (hostName.length < 2) {
+                showMobileError('Name must be at least 2 characters long');
+                return;
+            }
+            
+            if (hostName.length > 20) {
+                showMobileError('Name must be less than 20 characters');
                 return;
             }
 
@@ -543,8 +718,10 @@
             const originalText = submitBtn.textContent;
             submitBtn.textContent = 'Creating...';
             submitBtn.disabled = true;
-
-
+            
+            // Add visual feedback for mobile
+            submitBtn.style.opacity = '0.7';
+            submitBtn.style.transform = 'scale(0.98)';
 
             const gameSettings = {
                 game_type: gameType
@@ -561,7 +738,12 @@
                     game_settings: gameSettings
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     hideCreateLobby();
@@ -578,32 +760,87 @@
                         data.lobby_url
                     );
                 } else {
-                    alert('Error creating lobby: ' + (data.message || 'Unknown error'));
+                    showMobileError('Error creating lobby: ' + (data.message || 'Unknown error'));
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('Error creating lobby. Please try again.');
+                if (error.message.includes('Failed to fetch')) {
+                    showMobileError('Network error. Please check your connection and try again.');
+                } else {
+                    showMobileError('Error creating lobby. Please try again.');
+                }
             })
             .finally(() => {
                 submitBtn.textContent = originalText;
                 submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                submitBtn.style.transform = 'scale(1)';
             });
         });
 
+        // Mobile-friendly error display function
+        function showMobileError(message) {
+            // Remove any existing error messages
+            const existingError = document.querySelector('.mobile-error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'mobile-error';
+            errorDiv.textContent = message;
+            document.body.appendChild(errorDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (errorDiv.parentElement) {
+                    errorDiv.remove();
+                }
+            }, 5000);
+        }
+        
+        // Mobile-friendly success display function
+        function showMobileSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'mobile-error';
+            successDiv.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+            successDiv.style.boxShadow = '0 10px 25px rgba(16, 185, 129, 0.3)';
+            successDiv.textContent = message;
+            document.body.appendChild(successDiv);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                if (successDiv.parentElement) {
+                    successDiv.remove();
+                }
+            }, 3000);
+        }
+        
         // Handle join lobby form submission
         document.getElementById('joinLobbyForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const lobbyCode = document.getElementById('lobbyCode').value.toUpperCase();
             const playerName = document.getElementById('playerName').value.trim();
             
+            // Mobile-friendly validation
             if (lobbyCode.length !== 6) {
-                alert('Please enter a valid 6-digit lobby code');
+                showMobileError('Please enter a valid 6-digit lobby code');
                 return;
             }
 
             if (!playerName) {
-                alert('Please enter your name');
+                showMobileError('Please enter your name');
+                return;
+            }
+            
+            if (playerName.length < 2) {
+                showMobileError('Name must be at least 2 characters long');
+                return;
+            }
+            
+            if (playerName.length > 20) {
+                showMobileError('Name must be less than 20 characters');
                 return;
             }
 
@@ -612,6 +849,10 @@
             const originalText = submitBtn.textContent;
             submitBtn.textContent = 'Joining...';
             submitBtn.disabled = true;
+            
+            // Add visual feedback for mobile
+            submitBtn.style.opacity = '0.7';
+            submitBtn.style.transform = 'scale(0.98)';
 
             fetch('/jeopardy/join-lobby', {
                 method: 'POST',
@@ -626,32 +867,83 @@
             })
             .then(response => {
                 console.log('Join lobby response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 return response.json();
             })
             .then(data => {
                 console.log('Join lobby response data:', data);
                 if (data.success) {
+                    showMobileSuccess('Successfully joined lobby! Redirecting...');
                     hideJoinLobby();
                     console.log('Redirecting to:', data.lobby_url);
-                    window.location.href = data.lobby_url;
+                    
+                    // Add a small delay for mobile users to see the success message
+                    setTimeout(() => {
+                        window.location.href = data.lobby_url;
+                    }, 1000);
                 } else {
                     console.error('Join lobby failed:', data.message);
-                    alert('Error joining lobby: ' + (data.message || 'Unknown error'));
+                    showMobileError('Error joining lobby: ' + (data.message || 'Unknown error'));
                 }
             })
             .catch(error => {
                 console.error('Error joining lobby:', error);
-                alert('Error joining lobby. Please try again.');
+                if (error.message.includes('Failed to fetch')) {
+                    showMobileError('Network error. Please check your connection and try again.');
+                } else {
+                    showMobileError('Error joining lobby. Please try again.');
+                }
             })
             .finally(() => {
                 submitBtn.textContent = originalText;
                 submitBtn.disabled = false;
+                submitBtn.style.opacity = '1';
+                submitBtn.style.transform = 'scale(1)';
             });
         });
 
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
             createParticles();
+            
+            // Mobile-specific optimizations
+            if (window.innerWidth <= 768) {
+                // Prevent zoom on input focus for iOS
+                const inputs = document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]');
+                inputs.forEach(input => {
+                    input.addEventListener('focus', function() {
+                        // Prevent zoom on iOS
+                        if (window.innerWidth <= 768) {
+                            this.style.fontSize = '16px';
+                        }
+                    });
+                });
+                
+                // Add touch event listeners for better mobile interaction
+                const buttons = document.querySelectorAll('.touch-button');
+                buttons.forEach(button => {
+                    button.addEventListener('touchstart', function() {
+                        this.style.transform = 'scale(0.98)';
+                    });
+                    
+                    button.addEventListener('touchend', function() {
+                        this.style.transform = 'scale(1)';
+                    });
+                });
+            }
+            
+            // Handle orientation changes
+            window.addEventListener('orientationchange', () => {
+                setTimeout(() => {
+                    // Recalculate layout after orientation change
+                    if (window.innerWidth <= 768) {
+                        // Force mobile layout
+                        document.body.style.overflowX = 'hidden';
+                    }
+                }, 500);
+            });
         });
     </script>
 </body>
