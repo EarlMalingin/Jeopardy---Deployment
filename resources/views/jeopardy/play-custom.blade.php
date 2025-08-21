@@ -1318,8 +1318,21 @@
                     }
                 } catch (error) {
                     console.error('Error loading game state:', error);
-                    alert('Error loading game state. Please try again.');
-                    window.location.href = '/jeopardy/custom-game';
+                    
+                    // Check if we're in a lobby game
+                    if (this.lobbyCode) {
+                        // For lobby games, redirect back to lobby instead of custom game creator
+                        this.showErrorNotification('Error loading game state. Redirecting back to lobby...');
+                        setTimeout(() => {
+                            window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
+                        }, 2000);
+                    } else {
+                        // For non-lobby games, redirect to custom game creator
+                        this.showErrorNotification('Error loading game state. Please try again.');
+                        setTimeout(() => {
+                            window.location.href = '/jeopardy/custom-game';
+                        }, 2000);
+                    }
                 }
             }
 

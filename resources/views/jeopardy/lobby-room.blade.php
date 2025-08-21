@@ -751,6 +751,15 @@
                 </div>
                 <p class="text-gray-400 text-sm mt-2">Redirecting to game...</p>
                 
+                <!-- Manual Redirect Button (appears after 10 seconds if auto-redirect fails) -->
+                <div id="manualRedirectSection" class="mt-4 hidden">
+                    <p class="text-yellow-400 text-sm mb-2">Automatic redirect didn't work? Click below:</p>
+                    <button onclick="manualRedirectToGame()" 
+                            class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg text-sm transition-all duration-300 transform hover:scale-105">
+                        🎮 Join Game Manually
+                    </button>
+                </div>
+                
                 <!-- Reset Game Button (only for host) -->
                 <div class="mt-4">
                     <button onclick="resetGame()" 
@@ -923,6 +932,19 @@
             });
         }
 
+        function manualRedirectToGame() {
+            const gameType = '{{ $lobby->game_settings["game_type"] ?? "standard" }}';
+            const lobbyCode = '{{ $lobby->lobby_code }}';
+            
+            console.log('Manual redirect triggered:', { gameType, lobbyCode });
+            
+            if (gameType === 'custom') {
+                window.location.href = `/jeopardy/play-custom?lobby=${lobbyCode}`;
+            } else {
+                window.location.href = '/jeopardy/setup';
+            }
+        }
+        
         function resetGame() {
             if (confirm('Are you sure you want to reset the game? This will clear all progress and return to the lobby.')) {
                 fetch('/jeopardy/reset-lobby-game', {
@@ -1083,10 +1105,12 @@
 
         // Mobile-friendly redirect function
         function redirectToGame(gameType, lobbyCode) {
-            console.log('Redirecting to game:', { gameType, lobbyCode });
+            console.log('Redirecting to game:', { gameType, lobbyCode, isMobile: window.innerWidth <= 768 });
             
             // Add mobile-specific delay and user feedback
             if (window.innerWidth <= 768) {
+                console.log('Mobile device detected, using mobile redirect logic');
+                
                 notifications.info(
                     'Game Starting!',
                     'Redirecting you to the game...',
@@ -1095,16 +1119,28 @@
                 
                 // Use a longer delay for mobile to ensure proper loading
                 setTimeout(() => {
-                    if (gameType === 'custom') {
-                        console.log('Redirecting to custom game:', `/jeopardy/play-custom?lobby=${lobbyCode}`);
-                        window.location.href = `/jeopardy/play-custom?lobby=${lobbyCode}`;
-                    } else {
-                        console.log('Redirecting to standard game setup');
-                        window.location.href = '/jeopardy/setup';
+                    try {
+                        if (gameType === 'custom') {
+                            const redirectUrl = `/jeopardy/play-custom?lobby=${lobbyCode}`;
+                            console.log('Mobile redirecting to custom game:', redirectUrl);
+                            window.location.href = redirectUrl;
+                        } else {
+                            console.log('Mobile redirecting to standard game setup');
+                            window.location.href = '/jeopardy/setup';
+                        }
+                    } catch (error) {
+                        console.error('Error during mobile redirect:', error);
+                        // Fallback: try direct navigation
+                        if (gameType === 'custom') {
+                            window.location.replace(`/jeopardy/play-custom?lobby=${lobbyCode}`);
+                        } else {
+                            window.location.replace('/jeopardy/setup');
+                        }
                     }
-                }, 2500);
+                }, 3000); // Increased delay for mobile
             } else {
                 // Desktop redirect (faster)
+                console.log('Desktop device detected, using fast redirect');
                 if (gameType === 'custom') {
                     window.location.href = `/jeopardy/play-custom?lobby=${lobbyCode}`;
                 } else {
@@ -1116,6 +1152,7 @@
         // Auto-refresh lobby every 5 seconds and redirect if game started
         let lastPlayerCount = {{ count($lobby->players) }};
         let redirectInProgress = false; // Prevent multiple redirects
+        let statusCheckCount = 0; // Track status check attempts
         
         setInterval(() => {
             // Prevent multiple simultaneous redirects
@@ -1124,43 +1161,84 @@
                 return;
             }
             
+            statusCheckCount++;
+            console.log(`Status check #${statusCheckCount} for lobby {{ $lobby->lobby_code }}`);
+            
             // Check current lobby status via AJAX
             fetch('/jeopardy/lobby/{{ $lobby->lobby_code }}/status', {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Cache-Control': 'no-cache'
                 }
             })
             .then(response => {
+                console.log('Status check response status:', response.status);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 return response.json();
             })
             .then(data => {
+                console.log('Status check response data:', data);
                 if (data.success) {
                     const currentStatus = data.lobby.status;
                     const gameType = data.lobby.game_settings?.game_type || 'standard';
                     const currentPlayerCount = data.lobby.players?.length || 0;
                     
-                    console.log('Lobby status check:', { currentStatus, gameType, currentPlayerCount });
+                    console.log('Lobby status check:', { 
+                        currentStatus, 
+                        gameType, 
+                        currentPlayerCount,
+                        lastPlayerCount,
+                        isMobile: window.innerWidth <= 768
+                    });
                     
                     if (currentStatus === 'playing') {
                         redirectInProgress = true;
                         console.log('Game is playing, initiating redirect...');
+                        
+                        // Add mobile-specific notification
+                        if (window.innerWidth <= 768) {
+                            notifications.info(
+                                'Game Started!',
+                                'The host has started the game. Redirecting you...',
+                                3000
+                            );
+                        }
+                        
                         redirectToGame(gameType, '{{ $lobby->lobby_code }}');
+                        
+                        // Set up fallback timer for manual redirect
+                        setTimeout(() => {
+                            const manualRedirectSection = document.getElementById('manualRedirectSection');
+                            if (manualRedirectSection) {
+                                manualRedirectSection.classList.remove('hidden');
+                                console.log('Manual redirect button shown as fallback');
+                            }
+                        }, 10000); // Show manual redirect after 10 seconds
                     } else if (currentPlayerCount !== lastPlayerCount) {
                         // Only refresh if player count has changed
                         lastPlayerCount = currentPlayerCount;
                         console.log('Player count changed, reloading page...');
                         location.reload();
                     }
+                } else {
+                    console.error('Status check failed:', data.message);
                 }
             })
             .catch(error => {
                 console.error('Error checking lobby status:', error);
                 // Don't refresh on error to avoid infinite loops
+                // But log the error for debugging
+                if (window.innerWidth <= 768) {
+                    console.log('Mobile device detected, error details:', {
+                        error: error.message,
+                        lobbyCode: '{{ $lobby->lobby_code }}',
+                        userAgent: navigator.userAgent
+                    });
+                }
             });
         }, 5000);
 
@@ -1176,6 +1254,16 @@
                 console.log('Game already started, redirecting immediately...');
                 redirectInProgress = true;
                 redirectToGame(gameType, '{{ $lobby->lobby_code }}');
+                
+                // Set up fallback timer for manual redirect
+                setTimeout(() => {
+                    const manualRedirectSection = document.getElementById('manualRedirectSection');
+                    if (manualRedirectSection) {
+                        manualRedirectSection.classList.remove('hidden');
+                        console.log('Manual redirect button shown as fallback');
+                    }
+                }, 10000); // Show manual redirect after 10 seconds
+                
                 return;
             }
             
