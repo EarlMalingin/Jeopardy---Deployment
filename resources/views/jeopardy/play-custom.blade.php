@@ -1383,7 +1383,6 @@
                 try {
                     // Optimize: Skip sync if user is actively answering or submitting
                     if (this.isSubmittingAnswer || this.isAnsweringQuestion) {
-                        console.log('Skipping sync - user is actively answering or submitting');
                         return;
                     }
                     
@@ -1453,21 +1452,8 @@
                     const wasMyTurn = oldGameState ? !oldGameState.current_question : false;
                     const isMyTurn = !this.gameState.current_question;
                     
-                    // Check if a question was selected by another player
-                    const currentPlayerId = this.getCurrentPlayerId();
-                    const questionOwner = this.gameState.question_owner;
-                    const questionSelectedByOther = this.gameState.current_question && questionOwner && questionOwner !== currentPlayerId;
-                    
                     if (!wasMyTurn && isMyTurn) {
                         this.showYourTurnNotification();
-                    }
-                    
-                    // Show notification if question was selected by another player
-                    if (questionSelectedByOther && this.gameState.current_question) {
-                        this.showQuestionSelectedNotification(
-                            this.gameState.current_question.category, 
-                            this.gameState.current_question.value
-                        );
                     }
                     
                     // Immediately update display and game board
@@ -1493,60 +1479,42 @@
                     
                                          // Check if a new question was selected
                      if (newGameState.current_question && (!oldGameState || !oldGameState.current_question)) {
-                         // Don't show question if user just answered one (prevent modal from reappearing)
-                         if (this.isSubmittingAnswer || this.isAnsweringQuestion) {
-                             console.log('Skipping question display - user just answered a question');
-                             return;
-                         }
-                         
-                         // Check if this player owns the question
-                         const currentPlayerId = this.getCurrentPlayerId();
-                         const questionOwner = newGameState.question_owner;
-                         
-                         if (questionOwner === currentPlayerId && newGameState.current_question.question) {
-                             // This player selected the question and has the full question content - show the modal
-                             console.log('Showing question to owner:', currentPlayerId);
+                         // Check if this is a simplified question (from other players) or full question (from server)
+                         if (newGameState.current_question.selected && !newGameState.current_question.question) {
+                             // This is a simplified question from other players - highlight the cell and show timer
+                             this.highlightSelectedQuestion(newGameState.current_question);
+                                                         // Start timer for other players to see the countdown
+                            if (newGameState.question_timer) {
+                                this.startTimerForOtherPlayers(newGameState.question_timer);
+                            } else {
+                                // Use custom question timer if no specific timer provided
+                                const customTimer = this.gameState.custom_question_timer || 30;
+                                this.startTimerForOtherPlayers(customTimer);
+                            }
+                             
+                             // Show a read-only question modal for other players showing which question was selected
+                             this.showQuestionForOtherPlayers(newGameState.current_question, newGameState.current_team);
+                         } else {
+                             // This is a full question from the server - show it to the current player only
                              this.showQuestion(newGameState.current_question, newGameState.is_steal_attempt || false);
                              this.startTimer(newGameState.question_timer || 30);
                              this.startTeamTimer(); // Start team timer updates
-                         } else if (newGameState.current_question.selected && !newGameState.current_question.question) {
-                             // Another player selected the question - just highlight and notify (no modal)
-                             console.log('Question selected by another player, showing notification only');
-                             this.highlightSelectedQuestion(newGameState.current_question);
-                             
-                             // Start timer for other players to see the countdown
-                             if (newGameState.question_timer) {
-                                 this.startTimerForOtherPlayers(newGameState.question_timer);
-                             } else {
-                                 // Use custom question timer if no specific timer provided
-                                 const customTimer = this.gameState.custom_question_timer || 30;
-                                 this.startTimerForOtherPlayers(customTimer);
-                             }
-                             
-                             // Show notification to other players that a question was selected (no modal)
-                             this.showQuestionSelectedNotification(
-                                 newGameState.current_question.category, 
-                                 newGameState.current_question.value
-                             );
                          }
                                            } else if (!newGameState.current_question && oldGameState && oldGameState.current_question) {
-                          // Question was answered - hide modal and clear everything
-                          this.hideQuestionModal();
-                          this.removeQuestionHighlight();
-                          this.hasSelectedQuestion = false;
-                          this.isAnsweringQuestion = false;
-                          
-                          // Stop all timers
-                          if (this.timerInterval) {
-                              clearInterval(this.timerInterval);
-                              this.timerInterval = null;
+                          // Question was answered - only hide modal if we're not currently answering
+                          if (!this.isAnsweringQuestion && !this.isSubmittingAnswer) {
+                              this.hideQuestionModal();
+                              this.removeQuestionHighlight();
+                              if (this.timerInterval) {
+                                  clearInterval(this.timerInterval);
+                                  this.timerInterval = null;
+                              }
+                              // Stop team timer when question is answered
+                              if (this.teamTimerInterval) {
+                                  clearInterval(this.teamTimerInterval);
+                                  this.teamTimerInterval = null;
+                              }
                           }
-                          if (this.teamTimerInterval) {
-                              clearInterval(this.teamTimerInterval);
-                              this.teamTimerInterval = null;
-                          }
-                          
-                          console.log('Question cleared from game state - modal and timers stopped');
                       }
                     
                     // Don't sync timer from server to avoid conflicts
@@ -1927,15 +1895,8 @@
                                                  // Show the question to the current player
                          console.log('About to show question...');
                          this.hasSelectedQuestion = true; // Mark that current player selected this question
-                         
-                         // Ensure the question modal is properly shown
-                         setTimeout(() => {
-                             this.showQuestion(data.question, data.is_steal_attempt);
-                             console.log('Question shown successfully');
-                         }, 100); // Small delay to ensure DOM is ready
-                         
-                         // Show notification to other players that a question was selected
-                         this.showQuestionSelectedNotification(data.question.category, data.question.value);
+                         this.showQuestion(data.question, data.is_steal_attempt);
+                         console.log('Question shown successfully');
                         
                         console.log('About to start timer...');
                         this.startTimer(data.timer || this.gameState.custom_question_timer || 30);
@@ -1948,8 +1909,12 @@
                         // Create a simplified game state for other players that shows question selection and timer
                         const syncGameState = {
                             ...this.gameState,
-                            current_question: null, // Don't show question to other players
-                            question_owner: data.question_owner || this.getCurrentPlayerId(), // Track who owns the question
+                            current_question: {
+                                category: data.question.category,
+                                value: data.question.value,
+                                selected: true
+                                // Note: No question or answer content is sent to other players
+                            },
                             question_timer: data.timer // Include the timer so other players see it immediately
                         };
                         
@@ -2063,12 +2028,10 @@
                       // Show the answer input for the current player
                       answerInputElement.style.display = 'block';
                       answerInputElement.value = '';
-                      answerInputElement.disabled = false;
                       
                       // Restore the submit button functionality
                       const submitBtn = document.getElementById('submitAnswerBtn');
                       submitBtn.textContent = 'Submit Answer';
-                      submitBtn.disabled = false;
                       submitBtn.onclick = (e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -2078,19 +2041,12 @@
                       // Set flag to indicate user is actively answering
                       this.isAnsweringQuestion = true;
                       
-                      // Ensure modal is visible and properly positioned
-                      questionModalElement.classList.remove('hidden');
-                      questionModalElement.style.display = 'flex';
-                      questionModalElement.style.visibility = 'visible';
-                      questionModalElement.style.zIndex = '50';
-                      
-                      // Focus the answer input after a short delay to ensure modal is visible
-                      setTimeout(() => {
-                          answerInputElement.focus();
-                      }, 200);
+                      // Focus the answer input
+                      answerInputElement.focus();
                      
                      console.log('Question text set successfully');
                      console.log('Showing question modal');
+                     questionModalElement.classList.remove('hidden');
                      console.log('Question modal shown');
                      
                      // Show steal notification if it's a steal attempt (only for current player)
@@ -2199,7 +2155,7 @@
                             console.log('Timer reached zero, clearing interval');
                             clearInterval(this.timerInterval);
                             this.timerInterval = null;
-                            this.timerExpired();
+                            this.timeUp();
                         }
                     }, 1000);
                     
@@ -2408,41 +2364,31 @@
                         const teamThatAnswered = this.gameState.current_team;
                         const teamName = this.gameState[`team${teamThatAnswered}`].name;
                         
-                        // Update game state immediately
                         this.gameState = data.game_state;
                         
-                        // Clear the question modal immediately
                         this.hideQuestionModal();
-                        
-                        // Force hide the modal with additional checks
-                        const questionModal = document.getElementById('questionModal');
-                        if (questionModal) {
-                            questionModal.classList.add('hidden');
-                            questionModal.style.display = 'none';
-                        }
-                        
-                        // Clear any question highlights
-                        this.removeQuestionHighlight();
-                        
-                        // Stop any running timers
-                        if (this.timerInterval) {
-                            clearInterval(this.timerInterval);
-                            this.timerInterval = null;
-                        }
-                        if (this.teamTimerInterval) {
-                            clearInterval(this.teamTimerInterval);
-                            this.teamTimerInterval = null;
-                        }
-                        
-                        // Reset the question selection flag
-                        this.hasSelectedQuestion = false;
-                        this.isAnsweringQuestion = false;
-                        
-                        // Update display immediately
                         this.updateDisplay();
-                        this.updateGameBoard();
                         
-                        // Show answer result
+                        setTimeout(() => {
+                            this.updateGameBoard();
+                            
+                            if (data.question) {
+                                const currentQuestionKey = `${data.question.category}_${data.question.value}`;
+                                if (!this.gameState.answered_questions.some(q => 
+                                    typeof q === 'string' ? q === currentQuestionKey : q.key === currentQuestionKey
+                                )) {
+                                    this.gameState.answered_questions.push({
+                                        key: currentQuestionKey,
+                                        correct: data.is_correct
+                                    });
+                                }
+                            }
+                            
+                            setTimeout(() => {
+                                this.updateGameBoard();
+                            }, 100);
+                        }, 50);
+                        
                         this.showAnswerResult(data.is_correct, data.correct_answer, data.is_steal_attempt, data.points_earned || 0, teamName);
                         
                         // Immediately update lobby game state after submitting answer
@@ -2451,7 +2397,7 @@
                         // Force a quick sync to ensure all players see the result
                         setTimeout(() => {
                             this.syncGameState();
-                        }, 1000); // Increased delay to ensure question is cleared
+                        }, 500);
                         
                         // Always advance to next team's turn after answering (correct or incorrect)
                         setTimeout(() => {
@@ -2498,14 +2444,17 @@
                         console.log(`  Team ${i}: ${team.name}`);
                     }
                     
-                    // Call the advance turn endpoint to advance to next team
-                    const response = await fetch('/jeopardy/advance-turn', {
+                    // Call the timer endpoint to advance to next team
+                    const response = await fetch('/jeopardy/timer', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                         },
-                        body: JSON.stringify({})
+                        body: JSON.stringify({
+                            time_remaining: 0, // Force turn advancement
+                            team_timer: currentTeamTimer
+                        })
                     });
 
                     const data = await response.json();
@@ -2543,63 +2492,6 @@
                 }
             }
 
-            async timerExpired() {
-                console.log('=== TIMER EXPIRED ===');
-                
-                if (this.timerInterval) {
-                    clearInterval(this.timerInterval);
-                    this.timerInterval = null;
-                }
-                
-                if (this.teamTimerInterval) {
-                    clearInterval(this.teamTimerInterval);
-                    this.teamTimerInterval = null;
-                }
-                
-                const maxTimer = this.gameState && this.gameState.custom_question_timer ? this.gameState.custom_question_timer : 30;
-                this.initializeTimer(maxTimer);
-                
-                // Hide the question modal
-                this.hideQuestionModal();
-                
-                try {
-                    // Call the backend timer expired endpoint
-                    const response = await fetch('/jeopardy/timer-expired', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                        },
-                        body: JSON.stringify({})
-                    });
-
-                    const data = await response.json();
-                    
-                    if (data.success) {
-                        console.log('Timer expired - turn advanced successfully');
-                        this.gameState = data.game_state;
-                        
-                        // Update display immediately
-                        this.updateDisplay();
-                        this.updateGameBoard();
-                        
-                        // Show notification that time's up and next team's turn
-                        this.showTimeUpNotification();
-                        
-                        // Force a quick sync to ensure all players see the result
-                        setTimeout(() => {
-                            this.syncGameState();
-                        }, 500);
-                    } else {
-                        console.error('Failed to handle timer expiration:', data);
-                    }
-                } catch (error) {
-                    console.error('Error handling timer expiration:', error);
-                    // Fallback: manually advance turn
-                    await this.advanceToNextTeam();
-                }
-            }
-
             async timeUp() {
                 if (this.timerInterval) {
                     clearInterval(this.timerInterval);
@@ -2627,46 +2519,34 @@
                 this.showTimeUpNotification();
             }
 
-                                     hideQuestionModal() {
-                const questionModal = document.getElementById('questionModal');
-                const answerInput = document.getElementById('answerInput');
-                const submitBtn = document.getElementById('submitAnswerBtn');
-                
-                // Reset the modal state - be more aggressive
-                questionModal.classList.add('hidden');
-                questionModal.style.display = 'none';
-                questionModal.style.visibility = 'hidden';
-                
-                // Reset the answer input display and functionality
-                if (answerInput) {
-                    answerInput.style.display = 'block';
-                    answerInput.value = '';
-                    answerInput.disabled = false;
-                }
-                
-                // Reset the submit button
-                if (submitBtn) {
-                    submitBtn.textContent = 'Submit Answer';
-                    submitBtn.disabled = false;
-                    submitBtn.onclick = (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        this.submitAnswer();
-                    };
-                }
-                
-                // Reset the answering flag and question selection flag
-                this.isAnsweringQuestion = false;
-                this.hasSelectedQuestion = false;
-                
-                // Clear any question text
-                const questionText = document.getElementById('questionText');
-                if (questionText) {
-                    questionText.textContent = '';
-                }
-                
-                console.log('Question modal hidden and reset');
-            }
+                         hideQuestionModal() {
+                 const questionModal = document.getElementById('questionModal');
+                 const answerInput = document.getElementById('answerInput');
+                 const submitBtn = document.getElementById('submitAnswerBtn');
+                 
+                 // Reset the modal state
+                 questionModal.classList.add('hidden');
+                 
+                 // Reset the answer input display and functionality
+                 if (answerInput) {
+                     answerInput.style.display = 'block';
+                     answerInput.value = '';
+                 }
+                 
+                 // Reset the submit button
+                 if (submitBtn) {
+                     submitBtn.textContent = 'Submit Answer';
+                     submitBtn.onclick = (e) => {
+                         e.preventDefault();
+                         e.stopPropagation();
+                         this.submitAnswer();
+                     };
+                 }
+                 
+                 // Reset the answering flag and question selection flag
+                 this.isAnsweringQuestion = false;
+                 this.hasSelectedQuestion = false;
+             }
 
             updateDisplay() {
                 for (let i = 1; i <= this.gameState.team_count; i++) {
@@ -2718,11 +2598,7 @@
                             }))
                         });
                         
-                        if (isHost) {
-                            // Host can participate but doesn't have turns
-                            turnIndicator.innerHTML = `<span>🎮 Host Mode</span>`;
-                            turnIndicator.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
-                        } else if (currentTeam && currentTeam.name) {
+                                                 if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>🎯 ${currentTeam.name}'s Turn!</span>`;
                         } else if (currentPlayerId) {
                             turnIndicator.innerHTML = `<span>🎯 Player ${currentPlayerId}'s Turn!</span>`;
@@ -2748,10 +2624,7 @@
                         });
                         
                         // Show player name if available, otherwise show team name
-                        if (isHost) {
-                            // Host's turn - show special indicator
-                            turnIndicator.innerHTML = `<span>⏳ Host's Turn</span>`;
-                        } else if (currentTeam && currentTeam.name) {
+                        if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>⏳ ${currentTeam.name}'s Turn</span>`;
                         } else if (currentPlayerId) {
                             turnIndicator.innerHTML = `<span>⏳ Player ${currentPlayerId}'s Turn</span>`;
@@ -3080,15 +2953,7 @@
                     const playerId = sessionStorage.getItem('playerId');
                     
                     if (playerId) {
-                        // Host can participate but doesn't have turns - check if it's their turn
-                        const sessionId = sessionStorage.getItem('sessionId') || 'unknown';
-                        const hostSessionId = sessionStorage.getItem('hostSessionId');
-                        const isHost = (hostSessionId === sessionId);
-                        
-                        if (isHost) {
-                            console.log('isCurrentPlayerTurn - Host can participate but doesn\'t have turns');
-                            return false; // Host doesn't get turns but can participate
-                        }
+                                                 // Host can now participate in the game - no observer restrictions
                         
                         // Check if there's a current question being answered
                         if (this.gameState.current_question) {
@@ -3179,42 +3044,6 @@
                         }
                     }, 500);
                 }, 3000);
-            }
-            
-            showQuestionSelectedNotification(category, value) {
-                const currentPlayerId = this.getCurrentPlayerId();
-                const questionOwner = this.gameState.question_owner;
-                
-                // Only show notification if this player didn't select the question
-                if (currentPlayerId !== questionOwner) {
-                    const message = `🎯 ${category} for ${value} points has been selected.`;
-                    
-                    // Create temporary notification
-                    const notification = document.createElement('div');
-                    notification.className = 'mobile-notification bg-purple-600 text-white px-4 sm:px-6 py-2 sm:py-4 rounded-lg shadow-lg z-50 bounce-in';
-                    notification.style.cssText = `
-                        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-                        border: 2px solid #a78bfa;
-                        box-shadow: 0 10px 25px rgba(139, 92, 246, 0.4);
-                        font-weight: 600;
-                        font-size: 12px;
-                        max-width: 300px;
-                        text-align: center;
-                    `;
-                    notification.textContent = message;
-                    
-                    document.body.appendChild(notification);
-                    
-                    // Remove notification after 3 seconds
-                    setTimeout(() => {
-                        notification.style.animation = 'fadeOut 0.5s ease-out';
-                        setTimeout(() => {
-                            if (notification.parentElement) {
-                                notification.remove();
-                            }
-                        }, 500);
-                    }, 3000);
-                }
             }
 
             showQuestionForOtherPlayers(question, currentTeam) {
@@ -3360,10 +3189,6 @@
             }
 
             // Host observer mode removed - host can now participate in the game
-            
-            getCurrentPlayerId() {
-                return sessionStorage.getItem('playerId') || null;
-            }
             
             validateGameState() {
                 // Ensure all teams exist in the game state

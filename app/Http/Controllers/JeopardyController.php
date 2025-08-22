@@ -223,8 +223,8 @@ class JeopardyController extends Controller
         $gameTimer = $settings['game_timer'] ?? 300;
         $questionTimer = $settings['question_timer'] ?? 30;
         
-        // Calculate team count based on non-host players only (host is observer)
-        $teamCount = count($players) - 1; // Subtract 1 for host
+        // Calculate team count including host (host can now participate)
+        $teamCount = count($players); // Include all players including host
         if ($teamCount < 1) {
             $teamCount = 1; // Minimum 1 team
         }
@@ -234,15 +234,15 @@ class JeopardyController extends Controller
         $playerIds = [];
         $teamColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
         
-        // Include only non-host players for playable teams
-        for ($i = 1; $i < count($players); $i++) {
+        // Include all players including host for teams
+        for ($i = 0; $i < count($players); $i++) {
             if (isset($players[$i])) {
                 $finalTeamNames[] = $players[$i]['name'];
                 $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1);
             }
         }
         
-        // Store host ID separately for observer reference
+        // Store host ID for reference
         $hostId = $players[0]['id'] ?? '001';
         
         // Optimize: Build game state efficiently
@@ -266,7 +266,7 @@ class JeopardyController extends Controller
             'question_count' => $settings['question_count'] ?? 5
         ];
         
-        // Optimize: Build teams array efficiently (host is observer, not a team)
+        // Optimize: Build teams array efficiently (host is now a team)
         for ($i = 1; $i <= $teamCount; $i++) {
             $gameState['team' . $i] = [
                 'name' => $finalTeamNames[$i - 1] ?? "Team $i",
@@ -400,17 +400,6 @@ class JeopardyController extends Controller
             return response()->json(['success' => false, 'message' => 'No active game found']);
         }
         
-        // Add refresh detection and player persistence
-        $sessionId = Session::getId();
-        $playerName = Session::get('player_name');
-        $currentPlayerId = Session::get('current_player_id');
-        
-        \Log::info('=== GET GAME STATE DEBUG ===');
-        \Log::info('Session ID: ' . $sessionId);
-        \Log::info('Player name: ' . $playerName);
-        \Log::info('Current player ID: ' . $currentPlayerId);
-        \Log::info('Has game state: ' . ($gameState ? 'YES' : 'NO'));
-        
         // Try to find the lobby code for this game and get the most up-to-date game state
         $lobbyCode = null;
         if (isset($gameState['difficulty']) && $gameState['difficulty'] === 'custom') {
@@ -436,28 +425,8 @@ class JeopardyController extends Controller
                         }
                         
                         if ($hasCustomNames) {
-                            // Preserve player identity when updating game state
-                            $originalPlayerName = Session::get('player_name');
-                            $originalPlayerId = Session::get('current_player_id');
-                            $originalPlayerTeam = Session::get('current_player_team');
-                            
                             $gameState = $lobby->game_state;
                             \Log::info('Using lobby game state with custom team names');
-                            
-                            // Restore player identity if it was lost
-                            if ($originalPlayerName && !Session::get('player_name')) {
-                                Session::put('player_name', $originalPlayerName);
-                                \Log::info('Restored player name: ' . $originalPlayerName);
-                            }
-                            if ($originalPlayerId && !Session::get('current_player_id')) {
-                                Session::put('current_player_id', $originalPlayerId);
-                                \Log::info('Restored player ID: ' . $originalPlayerId);
-                            }
-                            if ($originalPlayerTeam && !Session::get('current_player_team')) {
-                                Session::put('current_player_team', $originalPlayerTeam);
-                                \Log::info('Restored player team: ' . $originalPlayerTeam);
-                            }
-                            Session::save();
                         }
                     }
                     break;
@@ -468,31 +437,12 @@ class JeopardyController extends Controller
         // Get current player team for debugging
         $currentPlayerTeam = $this->getCurrentPlayerTeam();
         
-        // Check if current question should be shown to this player
-        $currentPlayerId = $this->getCurrentPlayerId();
-        $questionOwner = $gameState['question_owner'] ?? null;
-        
-        // Only show question to the player who owns it
-        if (isset($gameState['current_question']) && $questionOwner !== $currentPlayerId) {
-            // Hide question from other players
-            $gameState['current_question'] = null;
-            $gameState['question_owner'] = null;
-        }
-        
-        // Ensure player identity is maintained
-        $this->ensurePlayerIdentity($gameState);
-        
         // Debug logging for game state request
         \Log::info('Game state request debug:');
         \Log::info('Session ID: ' . Session::getId());
         \Log::info('Current player team: ' . $currentPlayerTeam);
-        \Log::info('Current player ID: ' . $currentPlayerId);
-        \Log::info('Question owner: ' . $questionOwner);
         \Log::info('Lobby players: ' . json_encode(Session::get('lobby_players', [])));
         \Log::info('Game state current team: ' . ($gameState['current_team'] ?? 'N/A'));
-        
-        // Ensure timers are not reduced on page refresh
-        $this->preserveTimers($gameState);
         
         return response()->json([
             'success' => true, 
@@ -543,13 +493,12 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host can participate but doesn't have turns - assign to team 1
+                        // Host can now participate - assign to team 1
                         $playerTeam = 1;
                         Session::put('current_player_team', 1);
-                        Session::put('is_host', true);
                         Session::save();
                         
-                        \Log::info("Host assigned to team 1 (can participate) for session ID {$sessionId}");
+                        \Log::info("Host assigned to team 1 for session ID {$sessionId}");
                         return $playerTeam;
                     }
                     
@@ -698,16 +647,6 @@ class JeopardyController extends Controller
         if (!$gameState) {
             return response()->json(['error' => 'No active game'], 400);
         }
-        
-        // Add mobile-specific debugging
-        $userAgent = $request->header('User-Agent');
-        $isMobile = preg_match('/(android|iphone|ipad|mobile)/i', $userAgent);
-        \Log::info('=== SELECT QUESTION DEBUG ===');
-        \Log::info('Is mobile device: ' . ($isMobile ? 'YES' : 'NO'));
-        \Log::info('User agent: ' . $userAgent);
-        \Log::info('Session ID: ' . Session::getId());
-        \Log::info('Game state keys: ' . json_encode(array_keys($gameState)));
-        \Log::info('Has custom categories: ' . (isset($gameState['custom_categories']) ? 'YES' : 'NO'));
 
         // Debug logging for turn validation
         \Log::info('=== TURN VALIDATION DEBUG ===');
@@ -727,7 +666,7 @@ class JeopardyController extends Controller
             \Log::info('Player ID: ' . $playerId);
             \Log::info('Session ID: ' . Session::getId());
             
-                    // Host can participate but doesn't have turns - no restrictions
+                    // Host can now participate in the game - no observer restrictions
             
             // Check if it's this player's turn
             if ($playerId === null) {
@@ -745,19 +684,11 @@ class JeopardyController extends Controller
                 \Log::info('Turn validation passed: Player ID ' . $playerId . ' === Current player ID ' . $currentPlayerId);
             } else {
                 \Log::info('Turn validation failed: Player ID ' . $playerId . ' !== Current player ID ' . $currentPlayerId);
-                // Get the current team name for better error message
-                $currentTeamName = 'Unknown Team';
-                if (isset($gameState['current_team']) && isset($gameState['team' . $gameState['current_team']])) {
-                    $currentTeamName = $gameState['team' . $gameState['current_team']]['name'];
-                }
-                
                 return response()->json([
                     'success' => false,
-                    'error' => "It's {$currentTeamName}'s turn! Please wait for your turn.",
+                    'error' => 'Not your turn',
                     'current_player_id' => $currentPlayerId,
-                    'player_id' => $playerId,
-                    'current_team' => $gameState['current_team'] ?? 'unknown',
-                    'current_team_name' => $currentTeamName
+                    'player_id' => $playerId
                 ], 403);
             }
         }
@@ -794,32 +725,13 @@ class JeopardyController extends Controller
         // Check if question was found
         if (!$question) {
             \Log::error('Question not found for category: ' . $request->category . ', value: ' . $request->value);
-            
-            // Try to get question from lobby as fallback (for mobile devices)
-            if ($isMobile) {
-                \Log::info('Attempting to get question from lobby as fallback...');
-                $question = $this->getQuestionFromLobby($request->category, $request->value);
-                
-                if ($question) {
-                    \Log::info('Question found from lobby fallback: ' . json_encode($question));
-                } else {
-                    \Log::error('Question not found even from lobby fallback');
-                }
-            }
-            
-            if (!$question) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Question not found for the selected category and value'
-                ], 404);
-            }
+            return response()->json([
+                'success' => false,
+                'error' => 'Question not found for the selected category and value'
+            ], 404);
         }
         
-        // Store question only for the current player's session
-        $currentPlayerId = $gameState['current_player_id'] ?? '001';
         $gameState['current_question'] = $question;
-        $gameState['question_owner'] = $currentPlayerId; // Track who owns the current question
-        $gameState['question_selected_at'] = time(); // Track when question was selected
         
         // Use custom question timer if available, otherwise default to 30
         $questionTimer = $gameState['custom_question_timer'] ?? 30;
@@ -835,7 +747,6 @@ class JeopardyController extends Controller
         return response()->json([
             'success' => true,
             'question' => $question,
-            'question_owner' => $currentPlayerId,
             'timer' => $questionTimer,
             'is_steal_attempt' => $isStealAttempt
         ]);
@@ -853,94 +764,14 @@ class JeopardyController extends Controller
 
         $gameState = Session::get('jeopardy_game');
         
-        // Add mobile-specific debugging
-        $userAgent = $request->header('User-Agent');
-        $isMobile = preg_match('/(android|iphone|ipad|mobile)/i', $userAgent);
-        \Log::info('=== SUBMIT ANSWER DEBUG ===');
-        \Log::info('Is mobile device: ' . ($isMobile ? 'YES' : 'NO'));
-        \Log::info('User agent: ' . $userAgent);
-        \Log::info('Session ID: ' . Session::getId());
-        \Log::info('Has game state: ' . ($gameState ? 'YES' : 'NO'));
-        \Log::info('Has current question: ' . (isset($gameState['current_question']) ? 'YES' : 'NO'));
-        
         if (!$gameState || !$gameState['current_question']) {
-            \Log::error('No active question found for mobile device');
-            
-            // Try to get question from lobby as fallback for mobile
-            if ($isMobile) {
-                \Log::info('Attempting to get current question from lobby as fallback...');
-                
-                // Find the lobby and get the current question
-                $lobbies = \App\Models\Lobby::where('status', 'playing')->get();
-                foreach ($lobbies as $lobby) {
-                    if (isset($lobby->game_state) && isset($lobby->game_state['current_question'])) {
-                        $gameState = $lobby->game_state;
-                        \Log::info('Retrieved game state from lobby: ' . $lobby->lobby_code);
-                        break;
-                    }
-                }
-                
-                if (!$gameState || !$gameState['current_question']) {
-                    return response()->json(['error' => 'No active question'], 400);
-                }
-            } else {
-                return response()->json(['error' => 'No active question'], 400);
-            }
+            return response()->json(['error' => 'No active question'], 400);
         }
 
-        // Check if this is a custom game and validate turn
-        if (isset($gameState['difficulty']) && $gameState['difficulty'] === 'custom') {
-            $currentPlayerId = $gameState['current_player_id'] ?? '001';
-            $playerId = $this->getCurrentPlayerId();
-            $questionOwner = $gameState['question_owner'] ?? null;
-            
-            // Debug logging for answer validation
-            \Log::info('Answer validation debug:');
-            \Log::info('Current player ID: ' . $currentPlayerId);
-            \Log::info('Player ID: ' . $playerId);
-            \Log::info('Question owner: ' . $questionOwner);
-            \Log::info('Session ID: ' . Session::getId());
-            
-            // Check if player has a valid ID
-            if ($playerId === null) {
-                \Log::info('Answer validation failed: Player has no valid ID');
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Player not properly assigned'
-                ], 403);
-            }
-            
-            // Check if it's this player's turn and they own the question
-            if ($playerId !== $currentPlayerId) {
-                \Log::info('Answer validation failed: Not player\'s turn');
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Not your turn to answer'
-                ], 403);
-            }
-            
-            // Check if this player owns the current question
-            if ($questionOwner !== $playerId) {
-                \Log::info('Answer validation failed: Player does not own the question');
-                return response()->json([
-                    'success' => false,
-                    'error' => 'You do not own the current question'
-                ], 403);
-            }
-        }
+        // Host can now participate in the game - no observer restrictions
 
         $currentTeam = 'team' . $gameState['current_team'];
         $question = $gameState['current_question'];
-        
-        // Validate question structure
-        if (!isset($question['answer']) || !isset($question['category']) || !isset($question['value'])) {
-            \Log::error('Invalid question structure in submitAnswer: ' . json_encode($question));
-            return response()->json([
-                'success' => false,
-                'error' => 'Invalid question data'
-            ], 400);
-        }
-        
         $questionKey = $question['category'] . '_' . ($question['original_value'] ?? $question['value']);
         $isStealAttempt = $gameState['is_steal_attempt'] ?? false;
         $timeTaken = $request->time_taken;
@@ -1031,60 +862,41 @@ class JeopardyController extends Controller
         \Log::info('Answered questions array: ' . json_encode($gameState['answered_questions']));
         \Log::info('Game state keys: ' . json_encode(array_keys($gameState)));
         
-        // Automatically advance turn after answering
-        $oldTeam = $gameState['current_team'];
-        $teamCount = $gameState['team_count'];
-        
-        // Advance to next team
-        $gameState['current_team'] = $gameState['current_team'] == $teamCount ? 1 : $gameState['current_team'] + 1;
-        
-        // Update current player ID to match the new team
-        if (isset($gameState['player_ids']) && isset($gameState['current_team'])) {
-            $newTeamIndex = $gameState['current_team'] - 1; // Convert to 0-based index
-            \Log::info("Turn advancement debug - Team: {$gameState['current_team']}, Index: {$newTeamIndex}, Player IDs: " . json_encode($gameState['player_ids']));
+        // Switch to next player ID (cycle through all players including host)
+        if (isset($gameState['player_ids']) && isset($gameState['current_player_id'])) {
+            $playerIds = $gameState['player_ids'];
             
-            if (isset($gameState['player_ids'][$newTeamIndex])) {
-                $gameState['current_player_id'] = $gameState['player_ids'][$newTeamIndex];
-                \Log::info("Updated current player ID to: {$gameState['current_player_id']} for team {$gameState['current_team']}");
-            } else {
-                \Log::warning("Player ID not found for team {$gameState['current_team']}, available IDs: " . json_encode($gameState['player_ids']));
-                // Fallback: use the first available player ID
-                if (!empty($gameState['player_ids'])) {
-                    $gameState['current_player_id'] = $gameState['player_ids'][0];
-                    \Log::info("Fallback: Using first player ID: {$gameState['current_player_id']}");
-                }
+            $currentIndex = array_search($gameState['current_player_id'], $playerIds);
+            
+            if ($currentIndex !== false) {
+                // Move to next player ID
+                $nextIndex = ($currentIndex + 1) % count($playerIds);
+                $gameState['current_player_id'] = $playerIds[$nextIndex];
+                
+                // Update current_team to match the player index
+                $gameState['current_team'] = $nextIndex + 1;
+                
+                \Log::info('Advanced to next player: ' . $gameState['current_player_id'] . ' (team ' . $gameState['current_team'] . ')');
             }
+        } else {
+            // Fallback to old team-based system
+            $gameState['current_team'] = $gameState['current_team'] >= $gameState['team_count'] ? 1 : $gameState['current_team'] + 1;
         }
         
-        \Log::info("=== ANSWER SUBMITTED AND TURN ADVANCED ===");
-        \Log::info("Team: {$oldTeam} ({$gameState['team' . $oldTeam]['name']}) -> Team {$gameState['current_team']} ({$gameState['team' . $gameState['current_team']]['name']})");
-        \Log::info("Answer correct: " . ($isCorrect ? 'YES' : 'NO'));
-        \Log::info("Turn automatically advanced");
-        
-        // Clear current question and ownership
+        // Clear current question
         $gameState['current_question'] = null;
-        $gameState['question_owner'] = null;
-        $gameState['question_timer'] = null;
-        $gameState['is_steal_attempt'] = false;
         
         \Log::info('All team scores after: ' . json_encode([
             'team1' => $gameState['team1']['score'] ?? 'N/A',
             'team2' => $gameState['team2']['score'] ?? 'N/A'
         ]));
         \Log::info('New current team: ' . $gameState['current_team']);
-        \Log::info('New current player ID: ' . ($gameState['current_player_id'] ?? 'NOT SET'));
         
-        // Save the updated game state
         Session::put('jeopardy_game', $gameState);
         Session::save(); // Ensure session is saved immediately
         
-        \Log::info('Game state saved to session successfully');
-        
         // Update lobby game state if this is a lobby game
         $this->updateLobbyGameStateIfNeeded($gameState);
-        
-        // Force update the lobby with the new turn information
-        $this->forceUpdateLobbyTurn($gameState);
         
         \Log::info('Session saved. Current session data: ' . json_encode(Session::get('jeopardy_game')));
         
@@ -1113,16 +925,6 @@ class JeopardyController extends Controller
                     
                     // Create a copy of game state for synchronization
                     $syncGameState = $gameState;
-                    
-                    // Remove question content for other players but keep metadata
-                    if (isset($syncGameState['current_question'])) {
-                        // Keep only category, value, and owner info - remove question and answer content
-                        $syncGameState['current_question'] = [
-                            'category' => $syncGameState['current_question']['category'],
-                            'value' => $syncGameState['current_question']['value'],
-                            'selected' => true // Flag to indicate a question was selected
-                        ];
-                    }
                     
                     // Keep question timer for synchronization - all players should see the same timer
                     // The question timer will be synced every second to keep all players in sync
@@ -1194,124 +996,6 @@ class JeopardyController extends Controller
         // Each player manages their own timer independently
         
         return response()->json(['success' => true, 'game_state' => $gameState]);
-    }
-
-    public function advanceTurn(Request $request)
-    {
-        $gameState = Session::get('jeopardy_game');
-        
-        if (!$gameState) {
-            return response()->json(['error' => 'No active game'], 400);
-        }
-
-        $oldTeam = $gameState['current_team'];
-        $teamCount = $gameState['team_count'];
-        
-        // Log the current state before advancement
-        \Log::info("=== TURN ADVANCEMENT DEBUG ===");
-        \Log::info("Current team: {$oldTeam}");
-        \Log::info("Total teams: {$teamCount}");
-        \Log::info("All teams:");
-        for ($i = 1; $i <= $teamCount; $i++) {
-            $teamName = $gameState["team{$i}"]['name'];
-            \Log::info("  Team {$i}: {$teamName}");
-        }
-        
-        // Calculate expected next team
-        $expectedNextTeam = ($oldTeam % $teamCount) + 1;
-        
-        // Advance to next team
-        $gameState['current_team'] = $gameState['current_team'] == $teamCount ? 1 : $gameState['current_team'] + 1;
-        
-        // Update current player ID to match the new team
-        if (isset($gameState['player_ids']) && isset($gameState['current_team'])) {
-            $newTeamIndex = $gameState['current_team'] - 1; // Convert to 0-based index
-            \Log::info("Turn advancement debug - Team: {$gameState['current_team']}, Index: {$newTeamIndex}, Player IDs: " . json_encode($gameState['player_ids']));
-            
-            if (isset($gameState['player_ids'][$newTeamIndex])) {
-                $gameState['current_player_id'] = $gameState['player_ids'][$newTeamIndex];
-                \Log::info("Updated current player ID to: {$gameState['current_player_id']} for team {$gameState['current_team']}");
-            } else {
-                \Log::warning("Player ID not found for team {$gameState['current_team']}, available IDs: " . json_encode($gameState['player_ids']));
-                // Fallback: use the first available player ID
-                if (!empty($gameState['player_ids'])) {
-                    $gameState['current_player_id'] = $gameState['player_ids'][0];
-                    \Log::info("Fallback: Using first player ID: {$gameState['current_player_id']}");
-                }
-            }
-        }
-        
-        \Log::info("Turn advancement: Team {$oldTeam} -> Team {$gameState['current_team']} (Total teams: {$teamCount})");
-        \Log::info("Expected next team: {$expectedNextTeam}");
-        \Log::info("Actual next team: {$gameState['current_team']}");
-        \Log::info("Current player ID: " . ($gameState['current_player_id'] ?? 'NOT SET'));
-        
-        // Clear current question and ownership
-        $gameState['current_question'] = null;
-        $gameState['question_owner'] = null;
-        $gameState['question_timer'] = null;
-        $gameState['is_steal_attempt'] = false;
-
-        Session::put('jeopardy_game', $gameState);
-        Session::save();
-
-        // Update lobby game state if this is a lobby game
-        $this->updateLobbyGameStateIfNeeded($gameState);
-
-        return response()->json([
-            'success' => true,
-            'game_state' => $gameState
-        ]);
-    }
-
-    public function timerExpired(Request $request)
-    {
-        $gameState = Session::get('jeopardy_game');
-        
-        if (!$gameState) {
-            return response()->json(['error' => 'No active game'], 400);
-        }
-
-        \Log::info('=== TIMER EXPIRED ===');
-        \Log::info('Timer expired for team: ' . $gameState['current_team']);
-        \Log::info('Current question: ' . json_encode($gameState['current_question'] ?? 'none'));
-
-        // Clear the current question and ownership
-        $gameState['current_question'] = null;
-        $gameState['question_owner'] = null;
-        $gameState['question_timer'] = null;
-        $gameState['is_steal_attempt'] = false;
-
-        // Automatically advance to next team
-        $oldTeam = $gameState['current_team'];
-        $teamCount = $gameState['team_count'];
-        
-        // Advance to next team
-        $gameState['current_team'] = ($oldTeam % $teamCount) + 1;
-        
-        // Update current player ID based on the new team
-        if (isset($gameState['player_ids']) && isset($gameState['player_ids'][$gameState['current_team'] - 1])) {
-            $gameState['current_player_id'] = $gameState['player_ids'][$gameState['current_team'] - 1];
-        }
-
-        \Log::info('Timer expired - advanced from team ' . $oldTeam . ' to team ' . $gameState['current_team']);
-        \Log::info('New current player ID: ' . ($gameState['current_player_id'] ?? 'NOT SET'));
-
-        // Save the updated game state
-        Session::put('jeopardy_game', $gameState);
-        Session::save();
-
-        // Update lobby game state if this is a lobby game
-        $this->updateLobbyGameStateIfNeeded($gameState);
-        
-        // Force update the lobby with the new turn information
-        $this->forceUpdateLobbyTurn($gameState);
-
-        return response()->json([
-            'success' => true,
-            'game_state' => $gameState,
-            'message' => 'Timer expired, turn advanced to next team'
-        ]);
     }
 
     public function resetGame()
@@ -1457,17 +1141,16 @@ class JeopardyController extends Controller
         $isHost = ($hostSessionId === $sessionId);
         
         if ($isHost) {
-            // Host can participate but doesn't have turns - assign to team 1
+            // Host can now participate - assign to team 1
             $existingPlayers[$sessionId] = 1;
             Session::put('lobby_players', $existingPlayers);
             Session::put('current_player_team', 1);
-            Session::put('is_host', true);
             Session::save();
             
             return response()->json([
                 'success' => true,
                 'player_team' => 1,
-                'message' => "Host assigned to Team 1 (can participate)"
+                'message' => "Host assigned to Team 1"
             ]);
         }
         
@@ -1527,8 +1210,8 @@ class JeopardyController extends Controller
         if ($gameState && isset($gameState['custom_categories'])) {
             \Log::info('Using custom categories for question');
             \Log::info('Available categories: ' . json_encode(array_keys($gameState['custom_categories'])));
-            \Log::info('Requested category: ' . $category . ' (type: ' . gettype($category) . ')');
-            \Log::info('Requested value: ' . $value . ' (type: ' . gettype($value) . ')');
+            \Log::info('Requested category: ' . $category);
+            \Log::info('Requested value: ' . $value);
             
             // Use custom categories
             $customCategories = $gameState['custom_categories'];
@@ -1537,120 +1220,26 @@ class JeopardyController extends Controller
                 \Log::info('Category found: ' . $category);
                 \Log::info('Available values in category: ' . json_encode(array_keys($customCategories[$category])));
                 
-                // Try both string and integer versions of the value
-                $questionData = null;
                 if (isset($customCategories[$category][$value])) {
-                    $questionData = $customCategories[$category][$value];
-                    \Log::info('Value found in category: ' . $value);
-                } else if (isset($customCategories[$category][(string)$value])) {
-                    $questionData = $customCategories[$category][(string)$value];
-                    \Log::info('Value found as string in category: ' . (string)$value);
-                } else if (isset($customCategories[$category][(int)$value])) {
-                    $questionData = $customCategories[$category][(int)$value];
-                    \Log::info('Value found as int in category: ' . (int)$value);
-                }
-                
-                if ($questionData) {
-                    \Log::info('Question data structure: ' . json_encode($questionData));
+                    $selectedQuestion = $customCategories[$category][$value][0];
                     
-                    // Handle different possible data structures
-                    $selectedQuestion = null;
+                    \Log::info('Custom question found: ' . json_encode($selectedQuestion));
                     
-                    if (is_array($questionData)) {
-                        if (isset($questionData[0]) && is_array($questionData[0])) {
-                            // Array of questions format - take the first question
-                            $selectedQuestion = $questionData[0];
-                        } else if (isset($questionData['question']) && isset($questionData['answer'])) {
-                            // Direct question format
-                            $selectedQuestion = $questionData;
-                        } else if (count($questionData) > 0) {
-                            // Single question in array format
-                            $selectedQuestion = $questionData;
-                        }
-                    } else if (is_object($questionData)) {
-                        // Convert object to array
-                        $selectedQuestion = (array)$questionData;
-                    }
-                    
-                    // Additional validation and fixing
-                    if ($selectedQuestion) {
-                        // Ensure we have the required fields
-                        if (!isset($selectedQuestion['question']) || !isset($selectedQuestion['answer'])) {
-                            \Log::error('Question missing required fields. Available fields: ' . json_encode(array_keys($selectedQuestion)));
-                            
-                            // Try to fix common field name variations
-                            if (isset($selectedQuestion['text']) && !isset($selectedQuestion['question'])) {
-                                $selectedQuestion['question'] = $selectedQuestion['text'];
-                            }
-                            if (isset($selectedQuestion['ans']) && !isset($selectedQuestion['answer'])) {
-                                $selectedQuestion['answer'] = $selectedQuestion['ans'];
-                            }
-                            if (isset($selectedQuestion['correct_answer']) && !isset($selectedQuestion['answer'])) {
-                                $selectedQuestion['answer'] = $selectedQuestion['correct_answer'];
-                            }
-                        }
-                        
-                        // Final validation
-                        if (isset($selectedQuestion['question']) && isset($selectedQuestion['answer'])) {
-                            \Log::info('Custom question found: ' . json_encode($selectedQuestion));
-                            
-                            return [
-                                'question' => $selectedQuestion['question'],
-                                'answer' => $selectedQuestion['answer'],
-                                'category' => $category,
-                                'value' => $value,
-                                'original_value' => $value
-                            ];
-                        } else {
-                            \Log::error('Invalid question structure after processing: ' . json_encode($selectedQuestion));
-                        }
-                    }
+                    return [
+                        'question' => $selectedQuestion['question'],
+                        'answer' => $selectedQuestion['answer'],
+                        'category' => $category,
+                        'value' => $value,
+                        'original_value' => $value
+                    ];
                 } else {
                     \Log::error('Value ' . $value . ' not found in category ' . $category);
-                    \Log::error('Available values: ' . json_encode(array_keys($customCategories[$category])));
                 }
             } else {
                 \Log::error('Category ' . $category . ' not found in custom categories');
-                \Log::error('Available categories: ' . json_encode(array_keys($customCategories)));
-                
-                // Try case-insensitive category search as fallback
-                foreach ($customCategories as $catKey => $catData) {
-                    if (strtolower($catKey) === strtolower($category)) {
-                        \Log::info('Found category with different case: ' . $catKey);
-                        
-                        // Try to find the value in this category
-                        if (isset($catData[$value])) {
-                            $questionData = $catData[$value];
-                            \Log::info('Found question data with case-insensitive search');
-                            
-                            // Process the question data with the same logic as above
-                            $selectedQuestion = null;
-                            if (is_array($questionData)) {
-                                if (isset($questionData[0]) && is_array($questionData[0])) {
-                                    $selectedQuestion = $questionData[0];
-                                } else if (isset($questionData['question']) && isset($questionData['answer'])) {
-                                    $selectedQuestion = $questionData;
-                                } else if (count($questionData) > 0) {
-                                    $selectedQuestion = $questionData;
-                                }
-                            }
-                            
-                            if ($selectedQuestion && isset($selectedQuestion['question']) && isset($selectedQuestion['answer'])) {
-                                return [
-                                    'question' => $selectedQuestion['question'],
-                                    'answer' => $selectedQuestion['answer'],
-                                    'category' => $category,
-                                    'value' => $value,
-                                    'original_value' => $value
-                                ];
-                            }
-                        }
-                    }
-                }
             }
             
             \Log::error('Custom question not found for category: ' . $category . ', value: ' . $value);
-            \Log::error('Full custom categories structure: ' . json_encode($customCategories));
             return null;
         }
         
@@ -1951,7 +1540,7 @@ class JeopardyController extends Controller
         Session::put('lobby_created_by_session', $sessionId);
         Session::put('player_name', $request->host_name);
         Session::put('current_player_id', '001');
-        Session::put('is_host', true);
+        Session::put('is_host_observer', true);
         Session::save();
         
         \Log::info("Host session ID stored: {$sessionId} for lobby: {$lobby->lobby_code}");
@@ -2154,208 +1743,6 @@ class JeopardyController extends Controller
         return str_pad($nextId, 3, '0', STR_PAD_LEFT);
     }
 
-    private function ensurePlayerIdentity($gameState)
-    {
-        $sessionId = Session::getId();
-        $playerName = Session::get('player_name');
-        $currentPlayerId = Session::get('current_player_id');
-        $currentPlayerTeam = Session::get('current_player_team');
-        
-        \Log::info('=== ENSURING PLAYER IDENTITY ===');
-        \Log::info('Session ID: ' . $sessionId);
-        \Log::info('Player name: ' . $playerName);
-        \Log::info('Current player ID: ' . $currentPlayerId);
-        \Log::info('Current player team: ' . $currentPlayerTeam);
-        
-        // If we have a player name but no ID, try to find the ID from the lobby
-        if ($playerName && !$currentPlayerId) {
-            \Log::info('Player name found but no ID - searching lobby...');
-            
-            $lobbies = \App\Models\Lobby::where('status', 'playing')->get();
-            foreach ($lobbies as $lobby) {
-                if (isset($lobby->game_state) && 
-                    isset($lobby->game_state['custom_categories']) && 
-                    $lobby->game_state['custom_categories'] === $gameState['custom_categories']) {
-                    
-                    $players = $lobby->players ?? [];
-                    foreach ($players as $player) {
-                        if (isset($player['name']) && $player['name'] === $playerName) {
-                            $currentPlayerId = $player['id'] ?? '002';
-                            Session::put('current_player_id', $currentPlayerId);
-                            \Log::info('Found player ID from lobby: ' . $currentPlayerId);
-                            break 2;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // If we have a player ID but no team, try to determine the team
-        if ($currentPlayerId && !$currentPlayerTeam) {
-            \Log::info('Player ID found but no team - determining team...');
-            
-            // Host is always team 1
-            if ($currentPlayerId === '001') {
-                $currentPlayerTeam = 1;
-            } else {
-                // For other players, assign to available teams
-                $currentPlayerTeam = 2; // Default to team 2 for non-host players
-            }
-            
-            Session::put('current_player_team', $currentPlayerTeam);
-            \Log::info('Assigned player to team: ' . $currentPlayerTeam);
-        }
-        
-        Session::save();
-        \Log::info('Player identity ensured - Name: ' . $playerName . ', ID: ' . $currentPlayerId . ', Team: ' . $currentPlayerTeam);
-    }
-
-    private function preserveTimers($gameState)
-    {
-        // Store original timer values to prevent reduction on refresh
-        $originalTimers = Session::get('original_timers', []);
-        
-        // If this is the first time loading, store the original timer values
-        if (empty($originalTimers)) {
-            $originalTimers = [];
-            for ($i = 1; $i <= ($gameState['team_count'] ?? 0); $i++) {
-                $teamKey = "team{$i}";
-                if (isset($gameState[$teamKey]) && isset($gameState[$teamKey]['timer'])) {
-                    $originalTimers[$teamKey] = $gameState[$teamKey]['timer'];
-                }
-            }
-            Session::put('original_timers', $originalTimers);
-            \Log::info('Stored original timers: ' . json_encode($originalTimers));
-        }
-        
-        // Ensure timers don't go below original values unless explicitly reduced by game logic
-        for ($i = 1; $i <= ($gameState['team_count'] ?? 0); $i++) {
-            $teamKey = "team{$i}";
-            if (isset($originalTimers[$teamKey]) && isset($gameState[$teamKey]['timer'])) {
-                $originalTimer = $originalTimers[$teamKey];
-                $currentTimer = $gameState[$teamKey]['timer'];
-                
-                // Only allow timer to be reduced if it's due to game actions, not page refresh
-                if ($currentTimer > $originalTimer) {
-                    $gameState[$teamKey]['timer'] = $originalTimer;
-                    \Log::info("Preserved timer for {$teamKey}: {$originalTimer} (was {$currentTimer})");
-                }
-            }
-        }
-        
-        Session::save();
-    }
-
-    private function forceUpdateLobbyTurn($gameState)
-    {
-        try {
-            \Log::info('=== FORCE UPDATE LOBBY TURN ===');
-            \Log::info('Current team: ' . ($gameState['current_team'] ?? 'NOT SET'));
-            \Log::info('Current player ID: ' . ($gameState['current_player_id'] ?? 'NOT SET'));
-            
-            // Find the lobby that has this game state
-            $lobbies = \App\Models\Lobby::where('status', 'playing')->get();
-            foreach ($lobbies as $lobby) {
-                if (isset($lobby->game_state) && 
-                    isset($lobby->game_state['custom_categories']) && 
-                    $lobby->game_state['custom_categories'] === $gameState['custom_categories']) {
-                    
-                    // Update the lobby with the new turn information
-                    $lobby->game_state = $gameState;
-                    $lobby->save();
-                    
-                    \Log::info('Force updated lobby turn for lobby: ' . $lobby->lobby_code);
-                    \Log::info('New current team: ' . ($gameState['current_team'] ?? 'NOT SET'));
-                    \Log::info('New current player ID: ' . ($gameState['current_player_id'] ?? 'NOT SET'));
-                    break;
-                }
-            }
-        } catch (\Exception $e) {
-            \Log::error('Error in forceUpdateLobbyTurn: ' . $e->getMessage());
-        }
-    }
-
-    private function getQuestionFromLobby($category, $value)
-    {
-        try {
-            // Find the lobby that has this game state
-            $lobbies = \App\Models\Lobby::where('status', 'playing')->get();
-            
-            foreach ($lobbies as $lobby) {
-                if (isset($lobby->game_state) && 
-                    isset($lobby->game_state['custom_categories'])) {
-                    
-                    $customCategories = $lobby->game_state['custom_categories'];
-                    
-                    \Log::info('Checking lobby ' . $lobby->lobby_code . ' for question');
-                    \Log::info('Available categories: ' . json_encode(array_keys($customCategories)));
-                    
-                    if (isset($customCategories[$category])) {
-                        \Log::info('Category found in lobby: ' . $category);
-                        \Log::info('Available values: ' . json_encode(array_keys($customCategories[$category])));
-                        
-                        // Try multiple value formats
-                        $questionData = null;
-                        if (isset($customCategories[$category][$value])) {
-                            $questionData = $customCategories[$category][$value];
-                        } else if (isset($customCategories[$category][(string)$value])) {
-                            $questionData = $customCategories[$category][(string)$value];
-                        } else if (isset($customCategories[$category][(int)$value])) {
-                            $questionData = $customCategories[$category][(int)$value];
-                        }
-                        
-                        if ($questionData) {
-                            \Log::info('Question data found in lobby: ' . json_encode($questionData));
-                            
-                            // Process the question data
-                            $selectedQuestion = null;
-                            if (is_array($questionData)) {
-                                if (isset($questionData[0]) && is_array($questionData[0])) {
-                                    $selectedQuestion = $questionData[0];
-                                } else if (isset($questionData['question']) && isset($questionData['answer'])) {
-                                    $selectedQuestion = $questionData;
-                                } else if (count($questionData) > 0) {
-                                    $selectedQuestion = $questionData;
-                                }
-                            } else if (is_object($questionData)) {
-                                $selectedQuestion = (array)$questionData;
-                            }
-                            
-                            if ($selectedQuestion) {
-                                // Fix field names if needed
-                                if (isset($selectedQuestion['text']) && !isset($selectedQuestion['question'])) {
-                                    $selectedQuestion['question'] = $selectedQuestion['text'];
-                                }
-                                if (isset($selectedQuestion['ans']) && !isset($selectedQuestion['answer'])) {
-                                    $selectedQuestion['answer'] = $selectedQuestion['ans'];
-                                }
-                                if (isset($selectedQuestion['correct_answer']) && !isset($selectedQuestion['answer'])) {
-                                    $selectedQuestion['answer'] = $selectedQuestion['correct_answer'];
-                                }
-                                
-                                if (isset($selectedQuestion['question']) && isset($selectedQuestion['answer'])) {
-                                    return [
-                                        'question' => $selectedQuestion['question'],
-                                        'answer' => $selectedQuestion['answer'],
-                                        'category' => $category,
-                                        'value' => $value,
-                                        'original_value' => $value
-                                    ];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            
-            \Log::error('Question not found in any lobby');
-            return null;
-        } catch (\Exception $e) {
-            \Log::error('Error getting question from lobby: ' . $e->getMessage());
-            return null;
-        }
-    }
-
     private function getCurrentPlayerId()
     {
         // First, check if player ID is already assigned in session
@@ -2383,13 +1770,12 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host can participate - assign ID 001
+                        // Host can now participate - assign ID 001
                         $playerId = '001';
                         Session::put('current_player_id', $playerId);
-                        Session::put('is_host', true);
                         Session::save();
                         
-                        \Log::info("Host assigned to participate (ID 001) for session ID {$sessionId}");
+                        \Log::info("Host assigned to team (ID 001) for session ID {$sessionId}");
                         return $playerId;
                     }
                     

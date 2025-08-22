@@ -449,7 +449,7 @@
                     <div class="text-center">
                         <h3 class="text-lg font-bold text-white mb-2">Players</h3>
                         <p class="text-2xl font-bold text-green-400">{{ count($lobby->players) }}</p>
-                        <p class="text-xs text-gray-400 mt-1">Host observes only</p>
+                        <p class="text-xs text-gray-400 mt-1">Host can participate</p>
                     </div>
                     
                     <div class="text-center">
@@ -696,7 +696,7 @@
                             </svg>
                             <span class="text-green-400 font-bold">Standard Game Ready!</span>
                         </div>
-                        <p class="text-gray-400 text-sm mt-2">Standard Jeopardy game with predefined categories and questions. Host can participate in the game.</p>
+                        <p class="text-gray-400 text-sm mt-2">Standard Jeopardy game with predefined categories and questions. Host can participate.</p>
                     </div>
                 </div>
             </div>

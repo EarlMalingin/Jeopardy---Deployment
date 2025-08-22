@@ -22,8 +22,6 @@ Route::post('/jeopardy/start', [JeopardyController::class, 'startGame'])->name('
 Route::post('/jeopardy/question', [JeopardyController::class, 'selectQuestion'])->name('jeopardy.question');
 Route::post('/jeopardy/answer', [JeopardyController::class, 'submitAnswer'])->name('jeopardy.answer');
 Route::post('/jeopardy/timer', [JeopardyController::class, 'updateTimer'])->name('jeopardy.timer');
-Route::post('/jeopardy/timer-expired', [JeopardyController::class, 'timerExpired'])->name('jeopardy.timer-expired');
-Route::post('/jeopardy/advance-turn', [JeopardyController::class, 'advanceTurn'])->name('jeopardy.advance-turn');
 Route::post('/jeopardy/reset', [JeopardyController::class, 'resetGame'])->name('jeopardy.reset');
 Route::get('/jeopardy/categories', [JeopardyController::class, 'getCategories'])->name('jeopardy.categories');
 Route::get('/jeopardy/test-deduction', [JeopardyController::class, 'testDeduction'])->name('jeopardy.test-deduction');
