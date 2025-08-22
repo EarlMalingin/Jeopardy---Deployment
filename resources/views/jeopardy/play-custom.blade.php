@@ -3417,25 +3417,6 @@
                     console.error('Error force refreshing game state:', error);
                 }
             }
-                    z-index: 50;
-                    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-                    border: 2px solid #60a5fa;
-                    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-                    font-weight: 600;
-                    font-size: 0.875rem;
-                    max-width: 300px;
-                    text-align: center;
-                    margin: 0 auto;
-                `;
-                notification.textContent = message;
-                
-                document.body.appendChild(notification);
-                
-                // Remove notification after 2 seconds (shorter duration)
-                setTimeout(() => {
-                    notification.remove();
-                }, 2000);
-            }
 
             showTimeUpNotification() {
                 const currentTeam = this.gameState[`team${this.gameState.current_team}`];
