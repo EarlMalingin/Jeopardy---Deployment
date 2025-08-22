@@ -698,11 +698,19 @@ class JeopardyController extends Controller
                 \Log::info('Turn validation passed: Player ID ' . $playerId . ' === Current player ID ' . $currentPlayerId);
             } else {
                 \Log::info('Turn validation failed: Player ID ' . $playerId . ' !== Current player ID ' . $currentPlayerId);
+                // Get the current team name for better error message
+                $currentTeamName = 'Unknown Team';
+                if (isset($gameState['current_team']) && isset($gameState['team' . $gameState['current_team']])) {
+                    $currentTeamName = $gameState['team' . $gameState['current_team']]['name'];
+                }
+                
                 return response()->json([
                     'success' => false,
-                    'error' => 'Not your turn',
+                    'error' => "It's {$currentTeamName}'s turn! Please wait for your turn.",
                     'current_player_id' => $currentPlayerId,
-                    'player_id' => $playerId
+                    'player_id' => $playerId,
+                    'current_team' => $gameState['current_team'] ?? 'unknown',
+                    'current_team_name' => $currentTeamName
                 ], 403);
             }
         }
@@ -830,6 +838,16 @@ class JeopardyController extends Controller
 
         $currentTeam = 'team' . $gameState['current_team'];
         $question = $gameState['current_question'];
+        
+        // Validate question structure
+        if (!isset($question['answer']) || !isset($question['category']) || !isset($question['value'])) {
+            \Log::error('Invalid question structure in submitAnswer: ' . json_encode($question));
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid question data'
+            ], 400);
+        }
+        
         $questionKey = $question['category'] . '_' . ($question['original_value'] ?? $question['value']);
         $isStealAttempt = $gameState['is_steal_attempt'] ?? false;
         $timeTaken = $request->time_taken;
@@ -973,6 +991,16 @@ class JeopardyController extends Controller
                     // Create a copy of game state for synchronization
                     $syncGameState = $gameState;
                     
+                    // Remove question content for other players but keep metadata
+                    if (isset($syncGameState['current_question'])) {
+                        // Keep only category, value, and owner info - remove question and answer content
+                        $syncGameState['current_question'] = [
+                            'category' => $syncGameState['current_question']['category'],
+                            'value' => $syncGameState['current_question']['value'],
+                            'selected' => true // Flag to indicate a question was selected
+                        ];
+                    }
+                    
                     // Keep question timer for synchronization - all players should see the same timer
                     // The question timer will be synced every second to keep all players in sync
                     
@@ -1072,9 +1100,28 @@ class JeopardyController extends Controller
         // Advance to next team
         $gameState['current_team'] = $gameState['current_team'] == $teamCount ? 1 : $gameState['current_team'] + 1;
         
+        // Update current player ID to match the new team
+        if (isset($gameState['player_ids']) && isset($gameState['current_team'])) {
+            $newTeamIndex = $gameState['current_team'] - 1; // Convert to 0-based index
+            \Log::info("Turn advancement debug - Team: {$gameState['current_team']}, Index: {$newTeamIndex}, Player IDs: " . json_encode($gameState['player_ids']));
+            
+            if (isset($gameState['player_ids'][$newTeamIndex])) {
+                $gameState['current_player_id'] = $gameState['player_ids'][$newTeamIndex];
+                \Log::info("Updated current player ID to: {$gameState['current_player_id']} for team {$gameState['current_team']}");
+            } else {
+                \Log::warning("Player ID not found for team {$gameState['current_team']}, available IDs: " . json_encode($gameState['player_ids']));
+                // Fallback: use the first available player ID
+                if (!empty($gameState['player_ids'])) {
+                    $gameState['current_player_id'] = $gameState['player_ids'][0];
+                    \Log::info("Fallback: Using first player ID: {$gameState['current_player_id']}");
+                }
+            }
+        }
+        
         \Log::info("Turn advancement: Team {$oldTeam} -> Team {$gameState['current_team']} (Total teams: {$teamCount})");
         \Log::info("Expected next team: {$expectedNextTeam}");
         \Log::info("Actual next team: {$gameState['current_team']}");
+        \Log::info("Current player ID: " . ($gameState['current_player_id'] ?? 'NOT SET'));
         
         // Clear current question and ownership
         $gameState['current_question'] = null;
@@ -1307,8 +1354,8 @@ class JeopardyController extends Controller
         if ($gameState && isset($gameState['custom_categories'])) {
             \Log::info('Using custom categories for question');
             \Log::info('Available categories: ' . json_encode(array_keys($gameState['custom_categories'])));
-            \Log::info('Requested category: ' . $category);
-            \Log::info('Requested value: ' . $value);
+            \Log::info('Requested category: ' . $category . ' (type: ' . gettype($category) . ')');
+            \Log::info('Requested value: ' . $value . ' (type: ' . gettype($value) . ')');
             
             // Use custom categories
             $customCategories = $gameState['custom_categories'];
@@ -1317,26 +1364,120 @@ class JeopardyController extends Controller
                 \Log::info('Category found: ' . $category);
                 \Log::info('Available values in category: ' . json_encode(array_keys($customCategories[$category])));
                 
+                // Try both string and integer versions of the value
+                $questionData = null;
                 if (isset($customCategories[$category][$value])) {
-                    $selectedQuestion = $customCategories[$category][$value][0];
+                    $questionData = $customCategories[$category][$value];
+                    \Log::info('Value found in category: ' . $value);
+                } else if (isset($customCategories[$category][(string)$value])) {
+                    $questionData = $customCategories[$category][(string)$value];
+                    \Log::info('Value found as string in category: ' . (string)$value);
+                } else if (isset($customCategories[$category][(int)$value])) {
+                    $questionData = $customCategories[$category][(int)$value];
+                    \Log::info('Value found as int in category: ' . (int)$value);
+                }
+                
+                if ($questionData) {
+                    \Log::info('Question data structure: ' . json_encode($questionData));
                     
-                    \Log::info('Custom question found: ' . json_encode($selectedQuestion));
+                    // Handle different possible data structures
+                    $selectedQuestion = null;
                     
-                    return [
-                        'question' => $selectedQuestion['question'],
-                        'answer' => $selectedQuestion['answer'],
-                        'category' => $category,
-                        'value' => $value,
-                        'original_value' => $value
-                    ];
+                    if (is_array($questionData)) {
+                        if (isset($questionData[0]) && is_array($questionData[0])) {
+                            // Array of questions format - take the first question
+                            $selectedQuestion = $questionData[0];
+                        } else if (isset($questionData['question']) && isset($questionData['answer'])) {
+                            // Direct question format
+                            $selectedQuestion = $questionData;
+                        } else if (count($questionData) > 0) {
+                            // Single question in array format
+                            $selectedQuestion = $questionData;
+                        }
+                    } else if (is_object($questionData)) {
+                        // Convert object to array
+                        $selectedQuestion = (array)$questionData;
+                    }
+                    
+                    // Additional validation and fixing
+                    if ($selectedQuestion) {
+                        // Ensure we have the required fields
+                        if (!isset($selectedQuestion['question']) || !isset($selectedQuestion['answer'])) {
+                            \Log::error('Question missing required fields. Available fields: ' . json_encode(array_keys($selectedQuestion)));
+                            
+                            // Try to fix common field name variations
+                            if (isset($selectedQuestion['text']) && !isset($selectedQuestion['question'])) {
+                                $selectedQuestion['question'] = $selectedQuestion['text'];
+                            }
+                            if (isset($selectedQuestion['ans']) && !isset($selectedQuestion['answer'])) {
+                                $selectedQuestion['answer'] = $selectedQuestion['ans'];
+                            }
+                            if (isset($selectedQuestion['correct_answer']) && !isset($selectedQuestion['answer'])) {
+                                $selectedQuestion['answer'] = $selectedQuestion['correct_answer'];
+                            }
+                        }
+                        
+                        // Final validation
+                        if (isset($selectedQuestion['question']) && isset($selectedQuestion['answer'])) {
+                            \Log::info('Custom question found: ' . json_encode($selectedQuestion));
+                            
+                            return [
+                                'question' => $selectedQuestion['question'],
+                                'answer' => $selectedQuestion['answer'],
+                                'category' => $category,
+                                'value' => $value,
+                                'original_value' => $value
+                            ];
+                        } else {
+                            \Log::error('Invalid question structure after processing: ' . json_encode($selectedQuestion));
+                        }
+                    }
                 } else {
                     \Log::error('Value ' . $value . ' not found in category ' . $category);
+                    \Log::error('Available values: ' . json_encode(array_keys($customCategories[$category])));
                 }
             } else {
                 \Log::error('Category ' . $category . ' not found in custom categories');
+                \Log::error('Available categories: ' . json_encode(array_keys($customCategories)));
+                
+                // Try case-insensitive category search as fallback
+                foreach ($customCategories as $catKey => $catData) {
+                    if (strtolower($catKey) === strtolower($category)) {
+                        \Log::info('Found category with different case: ' . $catKey);
+                        
+                        // Try to find the value in this category
+                        if (isset($catData[$value])) {
+                            $questionData = $catData[$value];
+                            \Log::info('Found question data with case-insensitive search');
+                            
+                            // Process the question data with the same logic as above
+                            $selectedQuestion = null;
+                            if (is_array($questionData)) {
+                                if (isset($questionData[0]) && is_array($questionData[0])) {
+                                    $selectedQuestion = $questionData[0];
+                                } else if (isset($questionData['question']) && isset($questionData['answer'])) {
+                                    $selectedQuestion = $questionData;
+                                } else if (count($questionData) > 0) {
+                                    $selectedQuestion = $questionData;
+                                }
+                            }
+                            
+                            if ($selectedQuestion && isset($selectedQuestion['question']) && isset($selectedQuestion['answer'])) {
+                                return [
+                                    'question' => $selectedQuestion['question'],
+                                    'answer' => $selectedQuestion['answer'],
+                                    'category' => $category,
+                                    'value' => $value,
+                                    'original_value' => $value
+                                ];
+                            }
+                        }
+                    }
+                }
             }
             
             \Log::error('Custom question not found for category: ' . $category . ', value: ' . $value);
+            \Log::error('Full custom categories structure: ' . json_encode($customCategories));
             return null;
         }
         

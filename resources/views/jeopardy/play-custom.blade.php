@@ -1383,6 +1383,7 @@
                 try {
                     // Optimize: Skip sync if user is actively answering or submitting
                     if (this.isSubmittingAnswer || this.isAnsweringQuestion) {
+                        console.log('Skipping sync - user is actively answering or submitting');
                         return;
                     }
                     
@@ -1492,26 +1493,41 @@
                     
                                          // Check if a new question was selected
                      if (newGameState.current_question && (!oldGameState || !oldGameState.current_question)) {
-                         // Check if this is a simplified question (from other players) or full question (from server)
-                         if (newGameState.current_question.selected && !newGameState.current_question.question) {
-                             // This is a simplified question from other players - highlight the cell and show timer
-                             this.highlightSelectedQuestion(newGameState.current_question);
-                                                         // Start timer for other players to see the countdown
-                            if (newGameState.question_timer) {
-                                this.startTimerForOtherPlayers(newGameState.question_timer);
-                            } else {
-                                // Use custom question timer if no specific timer provided
-                                const customTimer = this.gameState.custom_question_timer || 30;
-                                this.startTimerForOtherPlayers(customTimer);
-                            }
-                             
-                             // Show a read-only question modal for other players showing which question was selected
-                             this.showQuestionForOtherPlayers(newGameState.current_question, newGameState.current_team);
-                         } else {
-                             // This is a full question from the server - show it to the current player only
+                         // Don't show question if user just answered one (prevent modal from reappearing)
+                         if (this.isSubmittingAnswer || this.isAnsweringQuestion) {
+                             console.log('Skipping question display - user just answered a question');
+                             return;
+                         }
+                         
+                         // Check if this player owns the question
+                         const currentPlayerId = this.getCurrentPlayerId();
+                         const questionOwner = newGameState.question_owner;
+                         
+                         if (questionOwner === currentPlayerId && newGameState.current_question.question) {
+                             // This player selected the question and has the full question content - show the modal
+                             console.log('Showing question to owner:', currentPlayerId);
                              this.showQuestion(newGameState.current_question, newGameState.is_steal_attempt || false);
                              this.startTimer(newGameState.question_timer || 30);
                              this.startTeamTimer(); // Start team timer updates
+                         } else if (newGameState.current_question.selected && !newGameState.current_question.question) {
+                             // Another player selected the question - just highlight and notify (no modal)
+                             console.log('Question selected by another player, showing notification only');
+                             this.highlightSelectedQuestion(newGameState.current_question);
+                             
+                             // Start timer for other players to see the countdown
+                             if (newGameState.question_timer) {
+                                 this.startTimerForOtherPlayers(newGameState.question_timer);
+                             } else {
+                                 // Use custom question timer if no specific timer provided
+                                 const customTimer = this.gameState.custom_question_timer || 30;
+                                 this.startTimerForOtherPlayers(customTimer);
+                             }
+                             
+                             // Show notification to other players that a question was selected (no modal)
+                             this.showQuestionSelectedNotification(
+                                 newGameState.current_question.category, 
+                                 newGameState.current_question.value
+                             );
                          }
                                            } else if (!newGameState.current_question && oldGameState && oldGameState.current_question) {
                           // Question was answered - hide modal and clear everything
@@ -2385,6 +2401,13 @@
                         // Clear the question modal immediately
                         this.hideQuestionModal();
                         
+                        // Force hide the modal with additional checks
+                        const questionModal = document.getElementById('questionModal');
+                        if (questionModal) {
+                            questionModal.classList.add('hidden');
+                            questionModal.style.display = 'none';
+                        }
+                        
                         // Clear any question highlights
                         this.removeQuestionHighlight();
                         
@@ -2415,7 +2438,7 @@
                         // Force a quick sync to ensure all players see the result
                         setTimeout(() => {
                             this.syncGameState();
-                        }, 500);
+                        }, 1000); // Increased delay to ensure question is cleared
                         
                         // Always advance to next team's turn after answering (correct or incorrect)
                         setTimeout(() => {
@@ -2539,8 +2562,10 @@
                 const answerInput = document.getElementById('answerInput');
                 const submitBtn = document.getElementById('submitAnswerBtn');
                 
-                // Reset the modal state
+                // Reset the modal state - be more aggressive
                 questionModal.classList.add('hidden');
+                questionModal.style.display = 'none';
+                questionModal.style.visibility = 'hidden';
                 
                 // Reset the answer input display and functionality
                 if (answerInput) {
