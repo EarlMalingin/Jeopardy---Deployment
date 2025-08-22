@@ -1107,7 +1107,8 @@
             }
 
             async showLoadingScreen() {
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Reduced loading time for faster game start
+                await new Promise(resolve => setTimeout(resolve, 500));
                 document.getElementById('loadingScreen').classList.add('hidden');
                 document.getElementById('gameContainer').classList.remove('hidden');
             }
@@ -1238,7 +1239,9 @@
                                 currentPlayerTeam: data.current_player_team,
                                 sessionId: data.session_id,
                                 lobbyPlayers: data.lobby_players,
-                                hostSessionId: data.host_session_id
+                                hostSessionId: data.host_session_id,
+                                teamNames: this.gameState.team1 ? this.gameState.team1.name : 'N/A',
+                                fullGameState: this.gameState
                             });
                             
                             // Store session information for host detection
@@ -1248,8 +1251,6 @@
                             if (data.host_session_id) {
                                 sessionStorage.setItem('hostSessionId', data.host_session_id);
                             }
-                                teamNames: this.gameState.team1 ? this.gameState.team1.name : 'N/A',
-                                fullGameState: this.gameState
                             });
                             
                             // Store the server-assigned player ID
@@ -1279,11 +1280,9 @@
                                     console.log('Player is host - can participate in game');
                                 }
                             } else {
-                                // If no team assigned, try to auto-assign
+                                // If no team assigned, try to auto-assign immediately
                                 console.log('No player team assigned, attempting auto-assignment...');
-                                setTimeout(() => {
-                                    autoAssignPlayer();
-                                }, 1000);
+                                this.autoAssignPlayer();
                             }
                             
                             // Use lobby code from server response if available
@@ -1306,7 +1305,7 @@
                             // Validate game state first
                             this.validateGameState();
                             
-                            // Optimize: Initialize game components in parallel
+                            // Initialize game components immediately
                             this.generateTeamCards();
                             this.createGameBoard();
                             this.updateDisplay();
@@ -1315,10 +1314,8 @@
                             const customTimer = data.game_state.custom_question_timer || 30;
                             this.initializeTimer(customTimer);
                             
-                            // Optimize: Start real-time synchronization with delay to avoid conflicts
-                            setTimeout(() => {
-                                this.startRealTimeSync();
-                            }, 500);
+                            // Start real-time synchronization immediately
+                            this.startRealTimeSync();
                         } else {
                             console.error('Invalid game state received:', data);
                             
@@ -1330,20 +1327,20 @@
                                     this.showMobileFriendlyError('Failed to load game state. Please try again.', () => {
                                         setTimeout(() => {
                                             this.loadGameState();
-                                        }, 2000);
+                                        }, 1000);
                                     });
                                 } else {
                                     this.showErrorNotification('Failed to load game state. Redirecting back to lobby...');
                                     setTimeout(() => {
                                         window.location.href = `/jeopardy/lobby/${this.lobbyCode}`;
-                                    }, 2000);
+                                    }, 1000);
                                 }
                             } else {
                                 // For non-lobby games, redirect to custom game creator
                                 this.showErrorNotification('No custom game found. Please create a custom game first.');
                                 setTimeout(() => {
                                     window.location.href = '/jeopardy/custom-game';
-                                }, 2000);
+                                }, 1000);
                             }
                         }
                     }
@@ -1377,10 +1374,10 @@
             }
 
             startRealTimeSync() {
-                // Optimize: Sync game state every 1 second instead of 500ms for better performance
+                // Sync game state every 2 seconds for better performance
                 this.syncInterval = setInterval(() => {
                     this.syncGameState();
-                }, 1000);
+                }, 2000);
             }
 
             async syncGameState() {
@@ -2406,7 +2403,7 @@
                         // Always advance to next team's turn after answering (correct or incorrect)
                         setTimeout(() => {
                             this.advanceToNextTeam();
-                        }, 3000); // Wait 3 seconds to show the answer result, then advance turn
+                        }, 2000); // Wait 2 seconds to show the answer result, then advance turn
                         
                         if (this.gameState.game_over) {
                             this.showGameOver();
