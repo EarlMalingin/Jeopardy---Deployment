@@ -1251,7 +1251,6 @@
                             if (data.host_session_id) {
                                 sessionStorage.setItem('hostSessionId', data.host_session_id);
                             }
-                            });
                             
                             // Store the server-assigned player ID
                             if (data.current_player_team !== undefined) {
