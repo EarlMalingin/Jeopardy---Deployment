@@ -959,7 +959,9 @@
                 <div id="turnIndicator" class="text-xs sm:text-sm text-green-400 hidden">
                     <span>🎯 Your Turn!</span>
                 </div>
-                <!-- Host observer indicator removed - host can now participate -->
+                <div id="hostObserverIndicator" class="text-xs sm:text-sm text-gray-400 hidden">
+                    <span>👁️ Observer Mode</span>
+                </div>
                 
                 <a href="/jeopardy" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-1 sm:py-2 px-2 sm:px-4 rounded-lg transition-colors text-sm sm:text-base touch-button">
                     ← Menu
@@ -1661,6 +1663,7 @@
                 
                 const teamColors = ['blue', 'red', 'green', 'yellow', 'purple', 'pink'];
                 
+                // Only show non-host players (host is observer only)
                 for (let i = 1; i <= this.gameState.team_count; i++) {
                     const team = this.gameState[`team${i}`];
                     const color = teamColors[i - 1];
@@ -1689,7 +1692,7 @@
                     teamsContainer.appendChild(teamCard);
                 }
                 
-                console.log(`Generated ${this.gameState.team_count} team cards`);
+                console.log(`Generated ${this.gameState.team_count} team cards (host excluded)`);
             }
 
             createGameBoard() {
@@ -2586,8 +2589,9 @@
                 
                 // Update turn indicator
                 const turnIndicator = document.getElementById('turnIndicator');
+                const hostObserverIndicator = document.getElementById('hostObserverIndicator');
                 
-                if (turnIndicator) {
+                if (turnIndicator && hostObserverIndicator) {
                     try {
                         // Check if this is a single-player game
                         const urlParams = new URLSearchParams(window.location.search);
@@ -2599,12 +2603,23 @@
                             sessionStorage.setItem('playerTeam', '1');
                         }
                         
-                        if (this.isCurrentPlayerTurn()) {
-                        turnIndicator.classList.remove('hidden');
-                        // Show player name if available
+                        // Check if current player is host (observer only)
                         const currentPlayerId = this.gameState.current_player_id;
                         const currentTeam = this.gameState[`team${this.gameState.current_team}`];
                         const isHost = currentPlayerId === (this.gameState.host_player_id || '001');
+                        const isCurrentPlayerHost = sessionStorage.getItem('playerId') === (this.gameState.host_player_id || '001');
+                        
+                        if (isCurrentPlayerHost) {
+                            // Show observer mode for host
+                            turnIndicator.classList.add('hidden');
+                            hostObserverIndicator.classList.remove('hidden');
+                            hostObserverIndicator.innerHTML = '<span>👁️ Observer Mode - Host cannot participate</span>';
+                            hostObserverIndicator.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
+                            hostObserverIndicator.style.border = '2px solid #9ca3af';
+                            hostObserverIndicator.style.boxShadow = '0 0 20px rgba(107, 114, 128, 0.3)';
+                        } else if (this.isCurrentPlayerTurn()) {
+                            turnIndicator.classList.remove('hidden');
+                            hostObserverIndicator.classList.add('hidden');
                         
                         // Debug logging
                         console.log('Turn indicator debug:', {
@@ -2630,10 +2645,22 @@
                         turnIndicator.style.border = '2px solid #6ee7b7';
                         turnIndicator.style.boxShadow = '0 0 20px rgba(16, 185, 129, 0.3)';
                     } else {
-                        turnIndicator.classList.remove('hidden');
-                        const currentTeam = this.gameState[`team${this.gameState.current_team}`];
-                        const currentPlayerId = this.gameState.current_player_id;
-                        const isHost = currentPlayerId === (this.gameState.host_player_id || '001');
+                        // Not current player's turn
+                        if (isCurrentPlayerHost) {
+                            // Host observer mode
+                            turnIndicator.classList.add('hidden');
+                            hostObserverIndicator.classList.remove('hidden');
+                            hostObserverIndicator.innerHTML = '<span>👁️ Observer Mode - Host cannot participate</span>';
+                            hostObserverIndicator.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
+                            hostObserverIndicator.style.border = '2px solid #9ca3af';
+                            hostObserverIndicator.style.boxShadow = '0 0 20px rgba(107, 114, 128, 0.3)';
+                        } else {
+                            // Regular player waiting for turn
+                            turnIndicator.classList.remove('hidden');
+                            hostObserverIndicator.classList.add('hidden');
+                            const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                            const currentPlayerId = this.gameState.current_player_id;
+                            const isHost = currentPlayerId === (this.gameState.host_player_id || '001');
                         
                         // Debug logging
                         console.log('Other player turn debug:', {
@@ -3005,7 +3032,14 @@
                         const playerId = sessionStorage.getItem('playerId');
                         
                         if (playerId) {
-                            // Host can now participate in the game - no observer restrictions
+                            // Check if this player is the host (observer only)
+                            const isHost = playerId === (this.gameState?.host_player_id || '001');
+                            
+                            if (isHost) {
+                                // Host cannot participate - observer only
+                                console.log(`isCurrentPlayerTurn - Host observer mode - Player ID: ${playerId}, Cannot participate`);
+                                return false;
+                            }
                             
                             // Check if there's a current question being answered
                             if (this.gameState?.current_question) {

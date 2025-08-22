@@ -223,33 +223,33 @@ class JeopardyController extends Controller
         $gameTimer = $settings['game_timer'] ?? 300;
         $questionTimer = $settings['question_timer'] ?? 30;
         
-        // Calculate team count including host (host can now participate)
-        $teamCount = count($players); // Include all players including host
+        // Calculate team count excluding host (host is observer only)
+        $teamCount = count($players) - 1; // Exclude host from active players
         if ($teamCount < 1) {
             $teamCount = 1; // Minimum 1 team
         }
         
-        // Optimize: Build team names and player IDs in one pass
+        // Optimize: Build team names and player IDs in one pass (excluding host)
         $finalTeamNames = [];
         $playerIds = [];
         $teamColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
         
-        // Include all players including host for teams
-        for ($i = 0; $i < count($players); $i++) {
+        // Store host ID for reference
+        $hostId = $players[0]['id'] ?? '001';
+        
+        // Include only non-host players for teams
+        for ($i = 1; $i < count($players); $i++) {
             if (isset($players[$i])) {
                 $finalTeamNames[] = $players[$i]['name'];
                 $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1);
             }
         }
         
-        // Store host ID for reference
-        $hostId = $players[0]['id'] ?? '001';
-        
         // Optimize: Build game state efficiently
         $gameState = [
             'team_count' => $teamCount,
             'current_team' => 1,
-            'current_player_id' => $playerIds[0] ?? '001', // Start with first player (host)
+            'current_player_id' => $playerIds[0] ?? '002', // Start with first non-host player
             'player_ids' => $playerIds,
             'host_player_id' => $hostId, // Store host ID separately
             'question_timer' => $questionTimer,
@@ -657,16 +657,27 @@ class JeopardyController extends Controller
         
         // Check if this is a custom game and validate turn
         if (isset($gameState['difficulty']) && $gameState['difficulty'] === 'custom') {
-            $currentPlayerId = $gameState['current_player_id'] ?? '001';
+            $currentPlayerId = $gameState['current_player_id'] ?? '002';
             $playerId = $this->getCurrentPlayerId();
+            $hostPlayerId = $gameState['host_player_id'] ?? '001';
             
             // Debug logging for turn validation
             \Log::info('Turn validation debug:');
             \Log::info('Current player ID: ' . $currentPlayerId);
             \Log::info('Player ID: ' . $playerId);
+            \Log::info('Host player ID: ' . $hostPlayerId);
             \Log::info('Session ID: ' . Session::getId());
             
-                    // Host can now participate in the game - no observer restrictions
+            // Host cannot participate in the game - observer only
+            if ($playerId === $hostPlayerId) {
+                \Log::info('Turn validation failed: Host cannot participate in gameplay');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Host is observer only - cannot participate in gameplay',
+                    'current_player_id' => $currentPlayerId,
+                    'player_id' => $playerId
+                ], 403);
+            }
             
             // Check if it's this player's turn
             if ($playerId === null) {
@@ -1795,12 +1806,13 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host can now participate - assign ID 001
+                        // Host is observer only - assign ID 001 but mark as observer
                         $playerId = '001';
                         Session::put('current_player_id', $playerId);
+                        Session::put('is_host_observer', true);
                         Session::save();
                         
-                        \Log::info("Host assigned to team (ID 001) for session ID {$sessionId}");
+                        \Log::info("Host assigned as observer (ID 001) for session ID {$sessionId}");
                         return $playerId;
                     }
                     
