@@ -493,13 +493,13 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host is observer only - assign to team 0 (observer)
-                        $playerTeam = 0;
-                        Session::put('current_player_team', 0);
-                        Session::put('is_host_observer', true);
+                        // Host can participate but doesn't have turns - assign to team 1
+                        $playerTeam = 1;
+                        Session::put('current_player_team', 1);
+                        Session::put('is_host', true);
                         Session::save();
                         
-                        \Log::info("Host assigned as observer (team 0) for session ID {$sessionId}");
+                        \Log::info("Host assigned to team 1 (can participate) for session ID {$sessionId}");
                         return $playerTeam;
                     }
                     
@@ -667,20 +667,7 @@ class JeopardyController extends Controller
             \Log::info('Player ID: ' . $playerId);
             \Log::info('Session ID: ' . Session::getId());
             
-                    // Check if player is host (observer) - prevent host from selecting questions
-        $sessionId = Session::getId();
-        $hostSessionId = Session::get('host_session_id');
-        $isHostObserver = ($hostSessionId === $sessionId);
-        
-        if ($isHostObserver) {
-            \Log::info('Turn validation failed: Host cannot participate in gameplay');
-            return response()->json([
-                'success' => false,
-                'error' => 'Host is observer only - cannot participate in gameplay',
-                'current_player_id' => $currentPlayerId,
-                'player_id' => $playerId
-            ], 403);
-        }
+                    // Host can participate but doesn't have turns - no restrictions
             
             // Check if it's this player's turn
             if ($playerId === null) {
@@ -782,17 +769,7 @@ class JeopardyController extends Controller
             return response()->json(['error' => 'No active question'], 400);
         }
 
-        // Check if player is host (observer) - prevent host from answering
-        $sessionId = Session::getId();
-        $hostSessionId = Session::get('host_session_id');
-        $isHostObserver = ($hostSessionId === $sessionId);
-        
-        if ($isHostObserver) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Host is observer only - cannot submit answers'
-            ], 403);
-        }
+        // Host can participate but doesn't have turns - no restrictions
 
         $currentTeam = 'team' . $gameState['current_team'];
         $question = $gameState['current_question'];
@@ -886,12 +863,12 @@ class JeopardyController extends Controller
         \Log::info('Answered questions array: ' . json_encode($gameState['answered_questions']));
         \Log::info('Game state keys: ' . json_encode(array_keys($gameState)));
         
-        // Switch to next player ID (cycle through non-host players only)
+        // Switch to next player ID (cycle through all players except host for turns)
         if (isset($gameState['player_ids']) && isset($gameState['current_player_id'])) {
             $playerIds = $gameState['player_ids'];
             $hostId = $gameState['host_player_id'] ?? '001';
             
-            // Filter out host from player rotation
+            // Filter out host from turn rotation but allow participation
             $playablePlayerIds = array_filter($playerIds, function($id) use ($hostId) {
                 return $id !== $hostId;
             });
@@ -1171,17 +1148,17 @@ class JeopardyController extends Controller
         $isHost = ($hostSessionId === $sessionId);
         
         if ($isHost) {
-            // Host is observer only - assign to team 0 (observer)
-            $existingPlayers[$sessionId] = 0;
+            // Host can participate but doesn't have turns - assign to team 1
+            $existingPlayers[$sessionId] = 1;
             Session::put('lobby_players', $existingPlayers);
-            Session::put('current_player_team', 0);
-            Session::put('is_host_observer', true);
+            Session::put('current_player_team', 1);
+            Session::put('is_host', true);
             Session::save();
             
             return response()->json([
                 'success' => true,
-                'player_team' => 0,
-                'message' => "Host is observer only - cannot participate in gameplay"
+                'player_team' => 1,
+                'message' => "Host assigned to Team 1 (can participate)"
             ]);
         }
         
@@ -1571,7 +1548,7 @@ class JeopardyController extends Controller
         Session::put('lobby_created_by_session', $sessionId);
         Session::put('player_name', $request->host_name);
         Session::put('current_player_id', '001');
-        Session::put('is_host_observer', true);
+        Session::put('is_host', true);
         Session::save();
         
         \Log::info("Host session ID stored: {$sessionId} for lobby: {$lobby->lobby_code}");
@@ -1801,13 +1778,13 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host is observer only - assign ID 001
+                        // Host can participate - assign ID 001
                         $playerId = '001';
                         Session::put('current_player_id', $playerId);
-                        Session::put('is_host_observer', true);
+                        Session::put('is_host', true);
                         Session::save();
                         
-                        \Log::info("Host assigned as observer (ID 001) for session ID {$sessionId}");
+                        \Log::info("Host assigned to participate (ID 001) for session ID {$sessionId}");
                         return $playerId;
                     }
                     

@@ -2599,9 +2599,9 @@
                         });
                         
                         if (isHost) {
-                            // Host is observer - show observer indicator
-                            turnIndicator.innerHTML = `<span>👁️ Observer Mode</span>`;
-                            turnIndicator.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
+                            // Host can participate but doesn't have turns
+                            turnIndicator.innerHTML = `<span>🎮 Host Mode</span>`;
+                            turnIndicator.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
                         } else if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>🎯 ${currentTeam.name}'s Turn!</span>`;
                         } else if (currentPlayerId) {
@@ -2960,14 +2960,14 @@
                     const playerId = sessionStorage.getItem('playerId');
                     
                     if (playerId) {
-                        // Check if this is the host (observer) - use session-based detection
+                        // Host can participate but doesn't have turns - check if it's their turn
                         const sessionId = sessionStorage.getItem('sessionId') || 'unknown';
                         const hostSessionId = sessionStorage.getItem('hostSessionId');
                         const isHost = (hostSessionId === sessionId);
                         
                         if (isHost) {
-                            console.log('isCurrentPlayerTurn - Host observer cannot have a turn');
-                            return false;
+                            console.log('isCurrentPlayerTurn - Host can participate but doesn\'t have turns');
+                            return false; // Host doesn't get turns but can participate
                         }
                         
                         // Check if there's a current question being answered
