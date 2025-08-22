@@ -223,8 +223,8 @@ class JeopardyController extends Controller
         $gameTimer = $settings['game_timer'] ?? 300;
         $questionTimer = $settings['question_timer'] ?? 30;
         
-        // Calculate team count based on all players in lobby (including host)
-        $teamCount = count($players);
+        // Calculate team count based on non-host players only (host participates but is invisible)
+        $teamCount = count($players) - 1; // Subtract 1 for host
         if ($teamCount < 1) {
             $teamCount = 1; // Minimum 1 team
         }
@@ -234,20 +234,25 @@ class JeopardyController extends Controller
         $playerIds = [];
         $teamColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
         
-        // Include all players including host
-        for ($i = 0; $i < count($players); $i++) {
+        // Include only non-host players for visible teams
+        for ($i = 1; $i < count($players); $i++) {
             if (isset($players[$i])) {
                 $finalTeamNames[] = $players[$i]['name'];
-                $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1); // Ensure IDs start from 001
+                $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1); // Ensure IDs start from 002
             }
         }
+        
+        // Add host to player IDs for participation but not as visible team
+        $hostId = $players[0]['id'] ?? '001';
+        $playerIds[] = $hostId;
         
         // Optimize: Build game state efficiently
         $gameState = [
             'team_count' => $teamCount,
             'current_team' => 1,
-            'current_player_id' => $playerIds[0] ?? '001', // Start with first player (host)
+            'current_player_id' => $playerIds[0] ?? '002', // Start with first visible player
             'player_ids' => $playerIds,
+            'host_player_id' => $hostId, // Store host ID separately
             'question_timer' => $questionTimer,
             'current_question' => null,
             'game_started' => true,
@@ -858,7 +863,7 @@ class JeopardyController extends Controller
         \Log::info('Answered questions array: ' . json_encode($gameState['answered_questions']));
         \Log::info('Game state keys: ' . json_encode(array_keys($gameState)));
         
-        // Switch to next player ID (cycle through all players)
+        // Switch to next player ID (cycle through all players including host)
         if (isset($gameState['player_ids']) && isset($gameState['current_player_id'])) {
             $playerIds = $gameState['player_ids'];
             $currentIndex = array_search($gameState['current_player_id'], $playerIds);
@@ -868,10 +873,18 @@ class JeopardyController extends Controller
                 $nextIndex = ($currentIndex + 1) % count($playerIds);
                 $gameState['current_player_id'] = $playerIds[$nextIndex];
                 
-                // Also update current_team for backward compatibility
-                $gameState['current_team'] = $nextIndex + 1;
+                // Check if next player is host
+                $isHost = $gameState['current_player_id'] === ($gameState['host_player_id'] ?? '001');
                 
-                \Log::info('Advanced to next player: ' . $gameState['current_player_id'] . ' (team ' . $gameState['current_team'] . ')');
+                if ($isHost) {
+                    // Host's turn - don't update current_team, keep it on the last visible team
+                    \Log::info('Advanced to host player: ' . $gameState['current_player_id'] . ' (host turn)');
+                } else {
+                    // Regular player's turn - update current_team to match visible team
+                    $visiblePlayerIndex = array_search($gameState['current_player_id'], array_slice($playerIds, 0, -1)); // Exclude host
+                    $gameState['current_team'] = $visiblePlayerIndex + 1;
+                    \Log::info('Advanced to visible player: ' . $gameState['current_player_id'] . ' (team ' . $gameState['current_team'] . ')');
+                }
             }
         } else {
             // Fallback to old team-based system

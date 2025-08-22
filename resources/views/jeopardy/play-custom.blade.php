@@ -2575,16 +2575,21 @@
                         // Show player name if available
                         const currentPlayerId = this.gameState.current_player_id;
                         const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                        const isHost = currentPlayerId === (this.gameState.host_player_id || '001');
                         
                         // Debug logging
                         console.log('Turn indicator debug:', {
                             currentTeam: this.gameState.current_team,
                             currentTeamData: currentTeam,
                             currentPlayerId: currentPlayerId,
-                            teamCount: this.gameState.team_count
+                            teamCount: this.gameState.team_count,
+                            isHost: isHost
                         });
                         
-                        if (currentTeam && currentTeam.name) {
+                        if (isHost) {
+                            // Host's turn - show special indicator
+                            turnIndicator.innerHTML = `<span>🎯 Host's Turn!</span>`;
+                        } else if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>🎯 ${currentTeam.name}'s Turn!</span>`;
                         } else if (currentPlayerId) {
                             turnIndicator.innerHTML = `<span>🎯 Player ${currentPlayerId}'s Turn!</span>`;
@@ -2597,27 +2602,30 @@
                     } else {
                         turnIndicator.classList.remove('hidden');
                         const currentTeam = this.gameState[`team${this.gameState.current_team}`];
+                        const currentPlayerId = this.gameState.current_player_id;
+                        const isHost = currentPlayerId === (this.gameState.host_player_id || '001');
                         
                         // Debug logging
                         console.log('Other player turn debug:', {
                             currentTeam: this.gameState.current_team,
                             currentTeamData: currentTeam,
-                            currentPlayerId: this.gameState.current_player_id,
-                            teamCount: this.gameState.team_count
+                            currentPlayerId: currentPlayerId,
+                            teamCount: this.gameState.team_count,
+                            isHost: isHost
                         });
                         
                         // Show player name if available, otherwise show team name
-                        if (currentTeam && currentTeam.name) {
+                        if (isHost) {
+                            // Host's turn - show special indicator
+                            turnIndicator.innerHTML = `<span>⏳ Host's Turn</span>`;
+                        } else if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>⏳ ${currentTeam.name}'s Turn</span>`;
+                        } else if (currentPlayerId) {
+                            turnIndicator.innerHTML = `<span>⏳ Player ${currentPlayerId}'s Turn</span>`;
                         } else {
-                            const currentPlayerId = this.gameState.current_player_id;
-                            if (currentPlayerId) {
-                                turnIndicator.innerHTML = `<span>⏳ Player ${currentPlayerId}'s Turn</span>`;
-                            } else {
-                                // Fallback to team number if team data is missing
-                                const teamNumber = this.gameState.current_team || 'Unknown';
-                                turnIndicator.innerHTML = `<span>⏳ Team ${teamNumber}'s Turn</span>`;
-                            }
+                            // Fallback to team number if team data is missing
+                            const teamNumber = this.gameState.current_team || 'Unknown';
+                            turnIndicator.innerHTML = `<span>⏳ Team ${teamNumber}'s Turn</span>`;
                         }
                         turnIndicator.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
                         turnIndicator.style.border = '2px solid #fbbf24';
