@@ -1691,12 +1691,15 @@ class JeopardyController extends Controller
         $sessionId = Session::getId();
         $currentPlayerTeam = Session::get('current_player_team');
         $lobbyPlayers = Session::get('lobby_players', []);
+        $currentPlayerId = Session::get('current_player_id');
         
         $debugInfo = [
             'session_id' => $sessionId,
             'current_player_team' => $currentPlayerTeam,
+            'current_player_id' => $currentPlayerId,
             'lobby_players' => $lobbyPlayers,
             'game_state_current_team' => $gameState['current_team'] ?? 'N/A',
+            'game_state_current_player_id' => $gameState['current_player_id'] ?? 'N/A',
             'game_state_teams' => []
         ];
         
@@ -1713,6 +1716,28 @@ class JeopardyController extends Controller
         return response()->json([
             'success' => true,
             'debug_info' => $debugInfo
+        ]);
+    }
+    
+    public function fixPlayerId(Request $request)
+    {
+        $request->validate([
+            'player_id' => 'required|string|size:3'
+        ]);
+        
+        $newPlayerId = $request->player_id;
+        $sessionId = Session::getId();
+        
+        // Update the player ID in session
+        Session::put('current_player_id', $newPlayerId);
+        Session::save();
+        
+        \Log::info("Manually fixed player ID to {$newPlayerId} for session {$sessionId}");
+        
+        return response()->json([
+            'success' => true,
+            'message' => "Player ID fixed to {$newPlayerId}",
+            'new_player_id' => $newPlayerId
         ]);
     }
 

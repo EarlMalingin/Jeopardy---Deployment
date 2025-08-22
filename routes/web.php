@@ -56,3 +56,4 @@ Route::post('/jeopardy/auto-assign-player', [JeopardyController::class, 'autoAss
 Route::get('/jeopardy/lobby/{code}/status', [JeopardyController::class, 'getLobbyStatus'])->name('jeopardy.lobby-status');
 Route::post('/jeopardy/clear-lobby-info', [JeopardyController::class, 'clearLobbyInfo'])->name('jeopardy.clear-lobby-info');
 Route::get('/jeopardy/debug-team-assignment', [JeopardyController::class, 'debugTeamAssignment'])->name('jeopardy.debug-team-assignment');
+Route::post('/jeopardy/fix-player-id', [JeopardyController::class, 'fixPlayerId'])->name('jeopardy.fix-player-id');

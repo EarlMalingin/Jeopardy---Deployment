@@ -3471,6 +3471,50 @@
                 }, 3000);
             }
             
+            async fixPlayerId(playerId) {
+                try {
+                    console.log('Fixing player ID to:', playerId);
+                    
+                    const response = await fetch('/jeopardy/fix-player-id', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        },
+                        body: JSON.stringify({
+                            player_id: playerId
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        console.log('Player ID fixed successfully:', data.message);
+                        
+                        // Update session storage
+                        sessionStorage.setItem('playerId', playerId);
+                        
+                        // Show success notification
+                        this.showSuccessNotification('Player ID Fixed', `Your player ID has been set to ${playerId}`);
+                        
+                        // Refresh game state to ensure everything is in sync
+                        setTimeout(() => {
+                            this.forceRefreshGameState();
+                        }, 1000);
+                        
+                        return data;
+                    } else {
+                        console.error('Failed to fix player ID:', data.message);
+                        this.showErrorNotification('Failed to fix player ID: ' + data.message);
+                        return data;
+                    }
+                } catch (error) {
+                    console.error('Error fixing player ID:', error);
+                    this.showErrorNotification('Error fixing player ID. Please try again.');
+                    return null;
+                }
+            }
+            
             // MOBILE-FRIENDLY HELPER FUNCTIONS
             initializeGameForLobby() {
                 console.log('Initializing game for lobby...');
@@ -3624,6 +3668,16 @@
                 if (window.customJeopardyGame) {
                     console.log('Manually refreshing game state...');
                     return window.customJeopardyGame.forceRefreshGameState();
+                } else {
+                    console.log('Game not initialized yet');
+                    return null;
+                }
+            };
+            
+            window.fixPlayerId = (playerId) => {
+                if (window.customJeopardyGame) {
+                    console.log('Fixing player ID to:', playerId);
+                    return window.customJeopardyGame.fixPlayerId(playerId);
                 } else {
                     console.log('Game not initialized yet');
                     return null;
