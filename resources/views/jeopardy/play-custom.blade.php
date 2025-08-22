@@ -1638,22 +1638,40 @@
                 const teamsContainer = document.getElementById('teamsContainer');
                 teamsContainer.innerHTML = '';
                 
+                // Calculate visible team count (exclude host team)
+                let visibleTeamCount = 0;
+                for (let i = 1; i <= this.gameState.team_count; i++) {
+                    const team = this.gameState[`team${i}`];
+                    if (!team.is_host) {
+                        visibleTeamCount++;
+                    }
+                }
+                
                 // Add class for 6 teams to force 3+3 layout on mobile
-                if (this.gameState.team_count === 6) {
+                if (visibleTeamCount === 6) {
                     teamsContainer.classList.add('six-teams');
                 } else {
                     teamsContainer.classList.remove('six-teams');
                 }
                 
                 const teamColors = ['blue', 'red', 'green', 'yellow', 'purple', 'pink'];
+                let visibleTeamIndex = 0;
                 
                 for (let i = 1; i <= this.gameState.team_count; i++) {
                     const team = this.gameState[`team${i}`];
-                    const color = teamColors[i - 1];
+                    
+                    // Skip host team - it's invisible in scorecards
+                    if (team.is_host) {
+                        console.log(`Skipping host team ${i} from scorecard display`);
+                        continue;
+                    }
+                    
+                    const color = teamColors[visibleTeamIndex];
+                    visibleTeamIndex++;
                     
                     const teamCard = document.createElement('div');
                     teamCard.id = `team${i}Card`;
-                    teamCard.className = `flex items-center space-x-2 sm:space-x-4 bg-gray-700 rounded-lg p-2 sm:p-4 flex-1 transition-all duration-300 team-card ${i > 1 ? 'ml-2' : 'mr-2'}`;
+                    teamCard.className = `flex items-center space-x-2 sm:space-x-4 bg-gray-700 rounded-lg p-2 sm:p-4 flex-1 transition-all duration-300 team-card ${visibleTeamIndex > 1 ? 'ml-2' : 'mr-2'}`;
                     
                     teamCard.innerHTML = `
                         <div class="w-3 h-3 sm:w-4 sm:h-4 bg-${color}-500 rounded-full flex-shrink-0"></div>
@@ -1674,6 +1692,8 @@
                     
                     teamsContainer.appendChild(teamCard);
                 }
+                
+                console.log(`Generated ${visibleTeamIndex} visible team cards (total teams: ${this.gameState.team_count})`);
             }
 
             createGameBoard() {
@@ -2543,6 +2563,13 @@
             updateDisplay() {
                 for (let i = 1; i <= this.gameState.team_count; i++) {
                     const team = this.gameState[`team${i}`];
+                    
+                    // Skip updating display for host team (invisible scorecard)
+                    if (team.is_host) {
+                        console.log(`Skipping display update for host team ${i}`);
+                        continue;
+                    }
+                    
                     const teamNameElement = document.getElementById(`team${i}Name`);
                     const teamScoreElement = document.getElementById(`team${i}Score`);
                     const teamCardElement = document.getElementById(`team${i}Card`);
@@ -2583,7 +2610,11 @@
                             currentTeamData: currentTeam,
                             currentPlayerId: currentPlayerId,
                             teamCount: this.gameState.team_count,
-                            isHost: isHost
+                            isHost: isHost,
+                            allTeams: Object.keys(this.gameState).filter(key => key.startsWith('team')).map(key => ({
+                                key: key,
+                                data: this.gameState[key]
+                            }))
                         });
                         
                         if (isHost) {
@@ -3190,10 +3221,13 @@
                     for (let i = 1; i <= this.gameState.team_count; i++) {
                         if (!this.gameState[`team${i}`]) {
                             console.warn(`Team ${i} missing from game state, creating default team`);
+                            // Determine if this is the host team
+                            const isHostTeam = (i === 1 && this.gameState.host_player_id);
                             this.gameState[`team${i}`] = {
-                                name: `Team ${i}`,
+                                name: isHostTeam ? 'Host' : `Team ${i}`,
                                 score: 0,
-                                timer: this.gameState.custom_game_timer || 300
+                                timer: this.gameState.custom_game_timer || 300,
+                                is_host: isHostTeam
                             };
                         }
                     }
@@ -3201,16 +3235,29 @@
                 
                 // Ensure current_team is valid
                 if (this.gameState && this.gameState.current_team) {
-                    if (this.gameState.current_team > this.gameState.team_count) {
-                        console.warn(`Current team ${this.gameState.current_team} exceeds team count ${this.gameState.team_count}, resetting to 1`);
+                    if (this.gameState.current_team > this.gameState.team_count || this.gameState.current_team < 1) {
+                        console.warn(`Current team ${this.gameState.current_team} is invalid (team count: ${this.gameState.team_count}), resetting to 1`);
                         this.gameState.current_team = 1;
                     }
+                } else if (this.gameState) {
+                    console.warn('Missing current_team, setting to 1');
+                    this.gameState.current_team = 1;
+                }
+                
+                // Ensure current_player_id exists and is valid
+                if (this.gameState && !this.gameState.current_player_id && this.gameState.player_ids && this.gameState.player_ids.length > 0) {
+                    console.warn('Missing current_player_id, setting to first player');
+                    this.gameState.current_player_id = this.gameState.player_ids[0];
                 }
                 
                 console.log('Game state validation complete:', {
                     teamCount: this.gameState?.team_count,
                     currentTeam: this.gameState?.current_team,
-                    teams: this.gameState ? Object.keys(this.gameState).filter(key => key.startsWith('team')) : []
+                    currentPlayerId: this.gameState?.current_player_id,
+                    teams: this.gameState ? Object.keys(this.gameState).filter(key => key.startsWith('team')).map(key => ({
+                        key: key,
+                        data: this.gameState[key]
+                    })) : []
                 });
             }
 

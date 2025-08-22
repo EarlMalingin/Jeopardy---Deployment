@@ -223,8 +223,9 @@ class JeopardyController extends Controller
         $gameTimer = $settings['game_timer'] ?? 300;
         $questionTimer = $settings['question_timer'] ?? 30;
         
-        // Calculate team count based on non-host players only (host participates but is invisible)
-        $teamCount = count($players) - 1; // Subtract 1 for host
+        // Calculate team count based on all players (including host)
+        // Host participates but won't be visible in scoreboards
+        $teamCount = count($players);
         if ($teamCount < 1) {
             $teamCount = 1; // Minimum 1 team
         }
@@ -234,17 +235,16 @@ class JeopardyController extends Controller
         $playerIds = [];
         $teamColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
         
-        // Include only non-host players for visible teams
-        for ($i = 1; $i < count($players); $i++) {
+        // Include ALL players including host (host will be team 1, others follow)
+        for ($i = 0; $i < count($players); $i++) {
             if (isset($players[$i])) {
                 $finalTeamNames[] = $players[$i]['name'];
-                $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1); // Ensure IDs start from 002
+                $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1);
             }
         }
         
-        // Add host to player IDs for participation but not as visible team
+        // Store host ID separately for reference
         $hostId = $players[0]['id'] ?? '001';
-        $playerIds[] = $hostId;
         
         // Optimize: Build game state efficiently
         $gameState = [
@@ -267,13 +267,14 @@ class JeopardyController extends Controller
             'question_count' => $settings['question_count'] ?? 5
         ];
         
-        // Optimize: Build teams array efficiently
+        // Optimize: Build teams array efficiently (including host as team 1)
         for ($i = 1; $i <= $teamCount; $i++) {
             $gameState['team' . $i] = [
                 'name' => $finalTeamNames[$i - 1] ?? "Team $i",
                 'score' => 0,
                 'color' => $teamColors[$i - 1] ?? '#3B82F6',
-                'timer' => $gameTimer
+                'timer' => $gameTimer,
+                'is_host' => ($i === 1) // Mark team 1 as host team
             ];
         }
         
