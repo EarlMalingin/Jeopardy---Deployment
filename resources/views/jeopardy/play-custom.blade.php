@@ -1514,20 +1514,23 @@
                              this.startTeamTimer(); // Start team timer updates
                          }
                                            } else if (!newGameState.current_question && oldGameState && oldGameState.current_question) {
-                          // Question was answered - only hide modal if we're not currently answering
-                          if (!this.isAnsweringQuestion && !this.isSubmittingAnswer) {
-                              this.hideQuestionModal();
-                              this.removeQuestionHighlight();
-                              if (this.timerInterval) {
-                                  clearInterval(this.timerInterval);
-                                  this.timerInterval = null;
-                              }
-                              // Stop team timer when question is answered
-                              if (this.teamTimerInterval) {
-                                  clearInterval(this.teamTimerInterval);
-                                  this.teamTimerInterval = null;
-                              }
+                          // Question was answered - hide modal and clear everything
+                          this.hideQuestionModal();
+                          this.removeQuestionHighlight();
+                          this.hasSelectedQuestion = false;
+                          this.isAnsweringQuestion = false;
+                          
+                          // Stop all timers
+                          if (this.timerInterval) {
+                              clearInterval(this.timerInterval);
+                              this.timerInterval = null;
                           }
+                          if (this.teamTimerInterval) {
+                              clearInterval(this.teamTimerInterval);
+                              this.teamTimerInterval = null;
+                          }
+                          
+                          console.log('Question cleared from game state - modal and timers stopped');
                       }
                     
                     // Don't sync timer from server to avoid conflicts
@@ -2376,31 +2379,34 @@
                         const teamThatAnswered = this.gameState.current_team;
                         const teamName = this.gameState[`team${teamThatAnswered}`].name;
                         
+                        // Update game state immediately
                         this.gameState = data.game_state;
                         
+                        // Clear the question modal immediately
                         this.hideQuestionModal();
+                        
+                        // Clear any question highlights
+                        this.removeQuestionHighlight();
+                        
+                        // Stop any running timers
+                        if (this.timerInterval) {
+                            clearInterval(this.timerInterval);
+                            this.timerInterval = null;
+                        }
+                        if (this.teamTimerInterval) {
+                            clearInterval(this.teamTimerInterval);
+                            this.teamTimerInterval = null;
+                        }
+                        
+                        // Reset the question selection flag
+                        this.hasSelectedQuestion = false;
+                        this.isAnsweringQuestion = false;
+                        
+                        // Update display immediately
                         this.updateDisplay();
+                        this.updateGameBoard();
                         
-                        setTimeout(() => {
-                            this.updateGameBoard();
-                            
-                            if (data.question) {
-                                const currentQuestionKey = `${data.question.category}_${data.question.value}`;
-                                if (!this.gameState.answered_questions.some(q => 
-                                    typeof q === 'string' ? q === currentQuestionKey : q.key === currentQuestionKey
-                                )) {
-                                    this.gameState.answered_questions.push({
-                                        key: currentQuestionKey,
-                                        correct: data.is_correct
-                                    });
-                                }
-                            }
-                            
-                            setTimeout(() => {
-                                this.updateGameBoard();
-                            }, 100);
-                        }, 50);
-                        
+                        // Show answer result
                         this.showAnswerResult(data.is_correct, data.correct_answer, data.is_steal_attempt, data.points_earned || 0, teamName);
                         
                         // Immediately update lobby game state after submitting answer
@@ -2528,34 +2534,44 @@
                 this.showTimeUpNotification();
             }
 
-                         hideQuestionModal() {
-                 const questionModal = document.getElementById('questionModal');
-                 const answerInput = document.getElementById('answerInput');
-                 const submitBtn = document.getElementById('submitAnswerBtn');
-                 
-                 // Reset the modal state
-                 questionModal.classList.add('hidden');
-                 
-                 // Reset the answer input display and functionality
-                 if (answerInput) {
-                     answerInput.style.display = 'block';
-                     answerInput.value = '';
-                 }
-                 
-                 // Reset the submit button
-                 if (submitBtn) {
-                     submitBtn.textContent = 'Submit Answer';
-                     submitBtn.onclick = (e) => {
-                         e.preventDefault();
-                         e.stopPropagation();
-                         this.submitAnswer();
-                     };
-                 }
-                 
-                 // Reset the answering flag and question selection flag
-                 this.isAnsweringQuestion = false;
-                 this.hasSelectedQuestion = false;
-             }
+                                     hideQuestionModal() {
+                const questionModal = document.getElementById('questionModal');
+                const answerInput = document.getElementById('answerInput');
+                const submitBtn = document.getElementById('submitAnswerBtn');
+                
+                // Reset the modal state
+                questionModal.classList.add('hidden');
+                
+                // Reset the answer input display and functionality
+                if (answerInput) {
+                    answerInput.style.display = 'block';
+                    answerInput.value = '';
+                    answerInput.disabled = false;
+                }
+                
+                // Reset the submit button
+                if (submitBtn) {
+                    submitBtn.textContent = 'Submit Answer';
+                    submitBtn.disabled = false;
+                    submitBtn.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.submitAnswer();
+                    };
+                }
+                
+                // Reset the answering flag and question selection flag
+                this.isAnsweringQuestion = false;
+                this.hasSelectedQuestion = false;
+                
+                // Clear any question text
+                const questionText = document.getElementById('questionText');
+                if (questionText) {
+                    questionText.textContent = '';
+                }
+                
+                console.log('Question modal hidden and reset');
+            }
 
             updateDisplay() {
                 for (let i = 1; i <= this.gameState.team_count; i++) {

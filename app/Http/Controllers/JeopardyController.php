@@ -930,6 +930,8 @@ class JeopardyController extends Controller
         // Clear current question and ownership
         $gameState['current_question'] = null;
         $gameState['question_owner'] = null;
+        $gameState['question_timer'] = null;
+        $gameState['is_steal_attempt'] = false;
         
         \Log::info('All team scores after: ' . json_encode([
             'team1' => $gameState['team1']['score'] ?? 'N/A',
@@ -1077,6 +1079,7 @@ class JeopardyController extends Controller
         // Clear current question and ownership
         $gameState['current_question'] = null;
         $gameState['question_owner'] = null;
+        $gameState['question_timer'] = null;
         $gameState['is_steal_attempt'] = false;
 
         Session::put('jeopardy_game', $gameState);
