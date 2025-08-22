@@ -2655,6 +2655,14 @@
                             turnIndicator.innerHTML = `<span>⏳ Team ${teamNumber}'s Turn</span>`;
                         }
                         
+                        // If team data is missing, try to refresh it
+                        if (!currentTeam || !currentTeam.name) {
+                            console.warn('Team data missing, attempting to refresh...');
+                            setTimeout(() => {
+                                this.forceRefreshGameState();
+                            }, 1000);
+                        }
+                        
                         // Additional debugging for team data
                         console.log('Team data debug:', {
                             currentTeamNumber: this.gameState.current_team,
@@ -3250,6 +3258,12 @@
                                 timer: this.gameState.custom_game_timer || 300
                             };
                         }
+                        
+                        // Ensure team has a name
+                        if (this.gameState[`team${i}`] && !this.gameState[`team${i}`].name) {
+                            console.warn(`Team ${i} has no name, setting default name`);
+                            this.gameState[`team${i}`].name = `Team ${i}`;
+                        }
                     }
                 }
                 
@@ -3397,6 +3411,28 @@
             async forceRefreshGameState() {
                 console.log('Force refreshing game state from server...');
                 try {
+                    // Try lobby game state first if we have a lobby code
+                    if (this.lobbyCode) {
+                        const lobbyResponse = await fetch('/jeopardy/get-lobby-game-state', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                            },
+                            body: JSON.stringify({
+                                lobby_code: this.lobbyCode
+                            })
+                        });
+                        
+                        const lobbyData = await lobbyResponse.json();
+                        if (lobbyData.success && lobbyData.game_state) {
+                            console.log('Received fresh game state from lobby');
+                            this.updateLocalGameState(lobbyData.game_state);
+                            return;
+                        }
+                    }
+                    
+                    // Fallback to session game state
                     const response = await fetch('/jeopardy/get-game-state', {
                         method: 'GET',
                         headers: {
@@ -3578,6 +3614,16 @@
             window.debugTurn = () => {
                 if (window.customJeopardyGame) {
                     return window.customJeopardyGame.debugTurn();
+                } else {
+                    console.log('Game not initialized yet');
+                    return null;
+                }
+            };
+            
+            window.refreshGameState = () => {
+                if (window.customJeopardyGame) {
+                    console.log('Manually refreshing game state...');
+                    return window.customJeopardyGame.forceRefreshGameState();
                 } else {
                     console.log('Game not initialized yet');
                     return null;
