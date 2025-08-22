@@ -450,6 +450,7 @@ class JeopardyController extends Controller
             'lobby_code' => $lobbyCode,
             'current_player_team' => $currentPlayerTeam,
             'session_id' => Session::getId(),
+            'host_session_id' => Session::get('host_session_id'),
             'lobby_players' => Session::get('lobby_players', [])
         ]);
     }
@@ -666,17 +667,20 @@ class JeopardyController extends Controller
             \Log::info('Player ID: ' . $playerId);
             \Log::info('Session ID: ' . Session::getId());
             
-            // Check if player is host (observer) - prevent host from selecting questions
-            $isHostObserver = Session::get('is_host_observer', false);
-            if ($isHostObserver) {
-                \Log::info('Turn validation failed: Host cannot participate in gameplay');
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Host is observer only - cannot participate in gameplay',
-                    'current_player_id' => $currentPlayerId,
-                    'player_id' => $playerId
-                ], 403);
-            }
+                    // Check if player is host (observer) - prevent host from selecting questions
+        $sessionId = Session::getId();
+        $hostSessionId = Session::get('host_session_id');
+        $isHostObserver = ($hostSessionId === $sessionId);
+        
+        if ($isHostObserver) {
+            \Log::info('Turn validation failed: Host cannot participate in gameplay');
+            return response()->json([
+                'success' => false,
+                'error' => 'Host is observer only - cannot participate in gameplay',
+                'current_player_id' => $currentPlayerId,
+                'player_id' => $playerId
+            ], 403);
+        }
             
             // Check if it's this player's turn
             if ($playerId === null) {
@@ -779,7 +783,10 @@ class JeopardyController extends Controller
         }
 
         // Check if player is host (observer) - prevent host from answering
-        $isHostObserver = Session::get('is_host_observer', false);
+        $sessionId = Session::getId();
+        $hostSessionId = Session::get('host_session_id');
+        $isHostObserver = ($hostSessionId === $sessionId);
+        
         if ($isHostObserver) {
             return response()->json([
                 'success' => false,
@@ -1160,7 +1167,8 @@ class JeopardyController extends Controller
         $existingPlayers = Session::get('lobby_players', []);
         
         // Check if this player is the host
-        $isHost = Session::get('host_session_id') === $sessionId;
+        $hostSessionId = Session::get('host_session_id');
+        $isHost = ($hostSessionId === $sessionId);
         
         if ($isHost) {
             // Host is observer only - assign to team 0 (observer)
@@ -1620,6 +1628,8 @@ class JeopardyController extends Controller
         // Store player name in session for later identification
         Session::put('player_name', $request->player_name);
         Session::put('current_player_id', $playerId);
+        // Ensure player is not marked as host observer
+        Session::forget('is_host_observer');
         Session::save();
 
         return response()->json([

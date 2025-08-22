@@ -1238,6 +1238,16 @@
                                 currentPlayerTeam: data.current_player_team,
                                 sessionId: data.session_id,
                                 lobbyPlayers: data.lobby_players,
+                                hostSessionId: data.host_session_id
+                            });
+                            
+                            // Store session information for host detection
+                            if (data.session_id) {
+                                sessionStorage.setItem('sessionId', data.session_id);
+                            }
+                            if (data.host_session_id) {
+                                sessionStorage.setItem('hostSessionId', data.host_session_id);
+                            }
                                 teamNames: this.gameState.team1 ? this.gameState.team1.name : 'N/A',
                                 fullGameState: this.gameState
                             });
@@ -2954,8 +2964,12 @@
                     const playerId = sessionStorage.getItem('playerId');
                     
                     if (playerId) {
-                        // Check if this is the host (observer)
-                        if (playerId === '001') {
+                        // Check if this is the host (observer) - use session-based detection
+                        const sessionId = sessionStorage.getItem('sessionId') || 'unknown';
+                        const hostSessionId = sessionStorage.getItem('hostSessionId');
+                        const isHost = (hostSessionId === sessionId);
+                        
+                        if (isHost) {
                             console.log('isCurrentPlayerTurn - Host observer cannot have a turn');
                             return false;
                         }
