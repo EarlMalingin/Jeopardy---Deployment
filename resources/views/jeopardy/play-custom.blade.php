@@ -1927,8 +1927,12 @@
                                                  // Show the question to the current player
                          console.log('About to show question...');
                          this.hasSelectedQuestion = true; // Mark that current player selected this question
-                         this.showQuestion(data.question, data.is_steal_attempt);
-                         console.log('Question shown successfully');
+                         
+                         // Ensure the question modal is properly shown
+                         setTimeout(() => {
+                             this.showQuestion(data.question, data.is_steal_attempt);
+                             console.log('Question shown successfully');
+                         }, 100); // Small delay to ensure DOM is ready
                          
                          // Show notification to other players that a question was selected
                          this.showQuestionSelectedNotification(data.question.category, data.question.value);
@@ -2059,10 +2063,12 @@
                       // Show the answer input for the current player
                       answerInputElement.style.display = 'block';
                       answerInputElement.value = '';
+                      answerInputElement.disabled = false;
                       
                       // Restore the submit button functionality
                       const submitBtn = document.getElementById('submitAnswerBtn');
                       submitBtn.textContent = 'Submit Answer';
+                      submitBtn.disabled = false;
                       submitBtn.onclick = (e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -2072,12 +2078,19 @@
                       // Set flag to indicate user is actively answering
                       this.isAnsweringQuestion = true;
                       
-                      // Focus the answer input
-                      answerInputElement.focus();
+                      // Ensure modal is visible and properly positioned
+                      questionModalElement.classList.remove('hidden');
+                      questionModalElement.style.display = 'flex';
+                      questionModalElement.style.visibility = 'visible';
+                      questionModalElement.style.zIndex = '50';
+                      
+                      // Focus the answer input after a short delay to ensure modal is visible
+                      setTimeout(() => {
+                          answerInputElement.focus();
+                      }, 200);
                      
                      console.log('Question text set successfully');
                      console.log('Showing question modal');
-                     questionModalElement.classList.remove('hidden');
                      console.log('Question modal shown');
                      
                      // Show steal notification if it's a steal attempt (only for current player)
@@ -2186,7 +2199,7 @@
                             console.log('Timer reached zero, clearing interval');
                             clearInterval(this.timerInterval);
                             this.timerInterval = null;
-                            this.timeUp();
+                            this.timerExpired();
                         }
                     }, 1000);
                     
@@ -2527,6 +2540,63 @@
                     setTimeout(() => {
                         this.isAdvancingTurn = false;
                     }, 1000);
+                }
+            }
+
+            async timerExpired() {
+                console.log('=== TIMER EXPIRED ===');
+                
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                    this.timerInterval = null;
+                }
+                
+                if (this.teamTimerInterval) {
+                    clearInterval(this.teamTimerInterval);
+                    this.teamTimerInterval = null;
+                }
+                
+                const maxTimer = this.gameState && this.gameState.custom_question_timer ? this.gameState.custom_question_timer : 30;
+                this.initializeTimer(maxTimer);
+                
+                // Hide the question modal
+                this.hideQuestionModal();
+                
+                try {
+                    // Call the backend timer expired endpoint
+                    const response = await fetch('/jeopardy/timer-expired', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        },
+                        body: JSON.stringify({})
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        console.log('Timer expired - turn advanced successfully');
+                        this.gameState = data.game_state;
+                        
+                        // Update display immediately
+                        this.updateDisplay();
+                        this.updateGameBoard();
+                        
+                        // Show notification that time's up and next team's turn
+                        this.showTimeUpNotification();
+                        
+                        // Force a quick sync to ensure all players see the result
+                        setTimeout(() => {
+                            this.syncGameState();
+                        }, 500);
+                    } else {
+                        console.error('Failed to handle timer expiration:', data);
+                    }
+                } catch (error) {
+                    console.error('Error handling timer expiration:', error);
+                    // Fallback: manually advance turn
+                    await this.advanceToNextTeam();
                 }
             }
 
