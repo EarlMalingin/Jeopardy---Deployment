@@ -1638,40 +1638,22 @@
                 const teamsContainer = document.getElementById('teamsContainer');
                 teamsContainer.innerHTML = '';
                 
-                // Calculate visible team count (exclude host team)
-                let visibleTeamCount = 0;
-                for (let i = 1; i <= this.gameState.team_count; i++) {
-                    const team = this.gameState[`team${i}`];
-                    if (!team.is_host) {
-                        visibleTeamCount++;
-                    }
-                }
-                
                 // Add class for 6 teams to force 3+3 layout on mobile
-                if (visibleTeamCount === 6) {
+                if (this.gameState.team_count === 6) {
                     teamsContainer.classList.add('six-teams');
                 } else {
                     teamsContainer.classList.remove('six-teams');
                 }
                 
                 const teamColors = ['blue', 'red', 'green', 'yellow', 'purple', 'pink'];
-                let visibleTeamIndex = 0;
                 
                 for (let i = 1; i <= this.gameState.team_count; i++) {
                     const team = this.gameState[`team${i}`];
-                    
-                    // Skip host team - it's invisible in scorecards
-                    if (team.is_host) {
-                        console.log(`Skipping host team ${i} from scorecard display`);
-                        continue;
-                    }
-                    
-                    const color = teamColors[visibleTeamIndex];
-                    visibleTeamIndex++;
+                    const color = teamColors[i - 1];
                     
                     const teamCard = document.createElement('div');
                     teamCard.id = `team${i}Card`;
-                    teamCard.className = `flex items-center space-x-2 sm:space-x-4 bg-gray-700 rounded-lg p-2 sm:p-4 flex-1 transition-all duration-300 team-card ${visibleTeamIndex > 1 ? 'ml-2' : 'mr-2'}`;
+                    teamCard.className = `flex items-center space-x-2 sm:space-x-4 bg-gray-700 rounded-lg p-2 sm:p-4 flex-1 transition-all duration-300 team-card ${i > 1 ? 'ml-2' : 'mr-2'}`;
                     
                     teamCard.innerHTML = `
                         <div class="w-3 h-3 sm:w-4 sm:h-4 bg-${color}-500 rounded-full flex-shrink-0"></div>
@@ -1693,7 +1675,7 @@
                     teamsContainer.appendChild(teamCard);
                 }
                 
-                console.log(`Generated ${visibleTeamIndex} visible team cards (total teams: ${this.gameState.team_count})`);
+                console.log(`Generated ${this.gameState.team_count} team cards`);
             }
 
             createGameBoard() {
@@ -2563,13 +2545,6 @@
             updateDisplay() {
                 for (let i = 1; i <= this.gameState.team_count; i++) {
                     const team = this.gameState[`team${i}`];
-                    
-                    // Skip updating display for host team (invisible scorecard)
-                    if (team.is_host) {
-                        console.log(`Skipping display update for host team ${i}`);
-                        continue;
-                    }
-                    
                     const teamNameElement = document.getElementById(`team${i}Name`);
                     const teamScoreElement = document.getElementById(`team${i}Score`);
                     const teamCardElement = document.getElementById(`team${i}Card`);
@@ -2618,8 +2593,9 @@
                         });
                         
                         if (isHost) {
-                            // Host's turn - show special indicator
-                            turnIndicator.innerHTML = `<span>🎯 Host's Turn!</span>`;
+                            // Host is observer - show observer indicator
+                            turnIndicator.innerHTML = `<span>👁️ Observer Mode</span>`;
+                            turnIndicator.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
                         } else if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>🎯 ${currentTeam.name}'s Turn!</span>`;
                         } else if (currentPlayerId) {
@@ -2978,7 +2954,11 @@
                     const playerId = sessionStorage.getItem('playerId');
                     
                     if (playerId) {
-                        // Host can now participate in the game
+                        // Check if this is the host (observer)
+                        if (playerId === '001') {
+                            console.log('isCurrentPlayerTurn - Host observer cannot have a turn');
+                            return false;
+                        }
                         
                         // Check if there's a current question being answered
                         if (this.gameState.current_question) {
@@ -3221,13 +3201,10 @@
                     for (let i = 1; i <= this.gameState.team_count; i++) {
                         if (!this.gameState[`team${i}`]) {
                             console.warn(`Team ${i} missing from game state, creating default team`);
-                            // Determine if this is the host team
-                            const isHostTeam = (i === 1 && this.gameState.host_player_id);
                             this.gameState[`team${i}`] = {
-                                name: isHostTeam ? 'Host' : `Team ${i}`,
+                                name: `Team ${i}`,
                                 score: 0,
-                                timer: this.gameState.custom_game_timer || 300,
-                                is_host: isHostTeam
+                                timer: this.gameState.custom_game_timer || 300
                             };
                         }
                     }

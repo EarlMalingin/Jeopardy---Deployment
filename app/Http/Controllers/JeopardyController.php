@@ -223,9 +223,8 @@ class JeopardyController extends Controller
         $gameTimer = $settings['game_timer'] ?? 300;
         $questionTimer = $settings['question_timer'] ?? 30;
         
-        // Calculate team count based on all players (including host)
-        // Host participates but won't be visible in scoreboards
-        $teamCount = count($players);
+        // Calculate team count based on non-host players only (host is observer)
+        $teamCount = count($players) - 1; // Subtract 1 for host
         if ($teamCount < 1) {
             $teamCount = 1; // Minimum 1 team
         }
@@ -235,15 +234,15 @@ class JeopardyController extends Controller
         $playerIds = [];
         $teamColors = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
         
-        // Include ALL players including host (host will be team 1, others follow)
-        for ($i = 0; $i < count($players); $i++) {
+        // Include only non-host players for playable teams
+        for ($i = 1; $i < count($players); $i++) {
             if (isset($players[$i])) {
                 $finalTeamNames[] = $players[$i]['name'];
                 $playerIds[] = $players[$i]['id'] ?? '00' . ($i + 1);
             }
         }
         
-        // Store host ID separately for reference
+        // Store host ID separately for observer reference
         $hostId = $players[0]['id'] ?? '001';
         
         // Optimize: Build game state efficiently
@@ -267,14 +266,13 @@ class JeopardyController extends Controller
             'question_count' => $settings['question_count'] ?? 5
         ];
         
-        // Optimize: Build teams array efficiently (including host as team 1)
+        // Optimize: Build teams array efficiently (host is observer, not a team)
         for ($i = 1; $i <= $teamCount; $i++) {
             $gameState['team' . $i] = [
                 'name' => $finalTeamNames[$i - 1] ?? "Team $i",
                 'score' => 0,
                 'color' => $teamColors[$i - 1] ?? '#3B82F6',
-                'timer' => $gameTimer,
-                'is_host' => ($i === 1) // Mark team 1 as host team
+                'timer' => $gameTimer
             ];
         }
         
@@ -494,13 +492,13 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host can now participate - assign to team 1
-                        $playerTeam = 1;
-                        Session::put('current_player_team', 1);
-                        Session::put('is_host', true);
+                        // Host is observer only - assign to team 0 (observer)
+                        $playerTeam = 0;
+                        Session::put('current_player_team', 0);
+                        Session::put('is_host_observer', true);
                         Session::save();
                         
-                        \Log::info("Host assigned to team 1 for session ID {$sessionId}");
+                        \Log::info("Host assigned as observer (team 0) for session ID {$sessionId}");
                         return $playerTeam;
                     }
                     
@@ -668,7 +666,17 @@ class JeopardyController extends Controller
             \Log::info('Player ID: ' . $playerId);
             \Log::info('Session ID: ' . Session::getId());
             
-            // Host can now participate in gameplay - no observer restrictions
+            // Check if player is host (observer) - prevent host from selecting questions
+            $isHostObserver = Session::get('is_host_observer', false);
+            if ($isHostObserver) {
+                \Log::info('Turn validation failed: Host cannot participate in gameplay');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Host is observer only - cannot participate in gameplay',
+                    'current_player_id' => $currentPlayerId,
+                    'player_id' => $playerId
+                ], 403);
+            }
             
             // Check if it's this player's turn
             if ($playerId === null) {
@@ -770,7 +778,14 @@ class JeopardyController extends Controller
             return response()->json(['error' => 'No active question'], 400);
         }
 
-        // Host can now submit answers - no observer restrictions
+        // Check if player is host (observer) - prevent host from answering
+        $isHostObserver = Session::get('is_host_observer', false);
+        if ($isHostObserver) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Host is observer only - cannot submit answers'
+            ], 403);
+        }
 
         $currentTeam = 'team' . $gameState['current_team'];
         $question = $gameState['current_question'];
@@ -864,28 +879,27 @@ class JeopardyController extends Controller
         \Log::info('Answered questions array: ' . json_encode($gameState['answered_questions']));
         \Log::info('Game state keys: ' . json_encode(array_keys($gameState)));
         
-        // Switch to next player ID (cycle through all players including host)
+        // Switch to next player ID (cycle through non-host players only)
         if (isset($gameState['player_ids']) && isset($gameState['current_player_id'])) {
             $playerIds = $gameState['player_ids'];
-            $currentIndex = array_search($gameState['current_player_id'], $playerIds);
+            $hostId = $gameState['host_player_id'] ?? '001';
+            
+            // Filter out host from player rotation
+            $playablePlayerIds = array_filter($playerIds, function($id) use ($hostId) {
+                return $id !== $hostId;
+            });
+            
+            $currentIndex = array_search($gameState['current_player_id'], $playablePlayerIds);
             
             if ($currentIndex !== false) {
-                // Move to next player ID
-                $nextIndex = ($currentIndex + 1) % count($playerIds);
-                $gameState['current_player_id'] = $playerIds[$nextIndex];
+                // Move to next playable player ID
+                $nextIndex = ($currentIndex + 1) % count($playablePlayerIds);
+                $gameState['current_player_id'] = array_values($playablePlayerIds)[$nextIndex];
                 
-                // Check if next player is host
-                $isHost = $gameState['current_player_id'] === ($gameState['host_player_id'] ?? '001');
+                // Update current_team to match the playable team index
+                $gameState['current_team'] = $nextIndex + 1;
                 
-                if ($isHost) {
-                    // Host's turn - don't update current_team, keep it on the last visible team
-                    \Log::info('Advanced to host player: ' . $gameState['current_player_id'] . ' (host turn)');
-                } else {
-                    // Regular player's turn - update current_team to match visible team
-                    $visiblePlayerIndex = array_search($gameState['current_player_id'], array_slice($playerIds, 0, -1)); // Exclude host
-                    $gameState['current_team'] = $visiblePlayerIndex + 1;
-                    \Log::info('Advanced to visible player: ' . $gameState['current_player_id'] . ' (team ' . $gameState['current_team'] . ')');
-                }
+                \Log::info('Advanced to next player: ' . $gameState['current_player_id'] . ' (team ' . $gameState['current_team'] . ')');
             }
         } else {
             // Fallback to old team-based system
@@ -1149,16 +1163,17 @@ class JeopardyController extends Controller
         $isHost = Session::get('host_session_id') === $sessionId;
         
         if ($isHost) {
-            // Host can now participate - assign to team 1
-            $existingPlayers[$sessionId] = 1;
+            // Host is observer only - assign to team 0 (observer)
+            $existingPlayers[$sessionId] = 0;
             Session::put('lobby_players', $existingPlayers);
-            Session::put('current_player_team', 1);
+            Session::put('current_player_team', 0);
+            Session::put('is_host_observer', true);
             Session::save();
             
             return response()->json([
                 'success' => true,
-                'player_team' => 1,
-                'message' => "Host assigned to Team 1"
+                'player_team' => 0,
+                'message' => "Host is observer only - cannot participate in gameplay"
             ]);
         }
         
@@ -1548,7 +1563,7 @@ class JeopardyController extends Controller
         Session::put('lobby_created_by_session', $sessionId);
         Session::put('player_name', $request->host_name);
         Session::put('current_player_id', '001');
-        Session::put('is_host', true);
+        Session::put('is_host_observer', true);
         Session::save();
         
         \Log::info("Host session ID stored: {$sessionId} for lobby: {$lobby->lobby_code}");
@@ -1776,13 +1791,13 @@ class JeopardyController extends Controller
                     $isHost = $this->isCurrentPlayerHost($lobby);
                     
                     if ($isHost) {
-                        // Host can now participate - assign ID 001
+                        // Host is observer only - assign ID 001
                         $playerId = '001';
                         Session::put('current_player_id', $playerId);
-                        Session::put('is_host', true);
+                        Session::put('is_host_observer', true);
                         Session::save();
                         
-                        \Log::info("Host assigned to participate (ID 001) for session ID {$sessionId}");
+                        \Log::info("Host assigned as observer (ID 001) for session ID {$sessionId}");
                         return $playerId;
                     }
                     
