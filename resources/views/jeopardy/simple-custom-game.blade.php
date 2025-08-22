@@ -387,6 +387,15 @@
                         </div>
                     </div>
                     
+                    <!-- Sample Data Button -->
+                    <div class="mt-6 text-center">
+                        <button type="button" onclick="loadSampleData()" 
+                                class="bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-2 sm:py-3 px-4 sm:px-6 rounded-lg transition-all duration-300 hover:from-purple-700 hover:to-pink-700 transform hover:scale-105 touch-button">
+                            🎯 Load Sample Data (50 Questions, 8 Categories)
+                        </button>
+                        <p class="text-gray-400 text-sm mt-2">Click to populate the form with sample questions and categories</p>
+                    </div>
+                    
                     <!-- Categories and Questions -->
                     <div id="categoriesContainer" class="space-y-6">
                         <!-- Category inputs will be generated here -->

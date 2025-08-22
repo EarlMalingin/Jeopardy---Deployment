@@ -474,6 +474,12 @@ class SimpleCustomController extends Controller
 
     /**
      * Calculate points based on question value and total question count
+     * Special scoring system for 50 questions:
+     * - 1-10 points = 1 point
+     * - 11-20 points = 2 points  
+     * - 21-30 points = 3 points
+     * - 31-40 points = 4 points
+     * - 41-50 points = 5 points
      * Special scoring system for 60 questions:
      * - 1-10 points = 1 point
      * - 11-20 points = 2 points  
@@ -484,7 +490,22 @@ class SimpleCustomController extends Controller
      */
     private function calculatePoints($questionValue, $questionCount)
     {
-        // Special scoring system only for 60 questions
+        // Special scoring system for 50 questions
+        if ($questionCount == 50) {
+            if ($questionValue >= 1 && $questionValue <= 10) {
+                return 1;
+            } elseif ($questionValue >= 11 && $questionValue <= 20) {
+                return 2;
+            } elseif ($questionValue >= 21 && $questionValue <= 30) {
+                return 3;
+            } elseif ($questionValue >= 31 && $questionValue <= 40) {
+                return 4;
+            } elseif ($questionValue >= 41 && $questionValue <= 50) {
+                return 5;
+            }
+        }
+        
+        // Special scoring system for 60 questions
         if ($questionCount == 60) {
             if ($questionValue >= 1 && $questionValue <= 10) {
                 return 1;

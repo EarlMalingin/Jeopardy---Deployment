@@ -2672,11 +2672,22 @@
                         });
                         
                         // Show player name if available, otherwise show team name
+                        console.log('Turn indicator data:', {
+                            currentTeam: currentTeam,
+                            currentTeamName: currentTeam?.name,
+                            currentPlayerId: currentPlayerId,
+                            gameStateCurrentTeam: this.gameState.current_team
+                        });
+                        
                         if (currentTeam && currentTeam.name) {
                             turnIndicator.innerHTML = `<span>⏳ ${currentTeam.name}'s Turn</span>`;
                         } else if (currentPlayerId) {
                             turnIndicator.innerHTML = `<span>⏳ Player ${currentPlayerId}'s Turn</span>`;
                         } else {
+                            // Force refresh game state if team data is missing
+                            console.error('Team data completely missing, forcing refresh');
+                            this.forceRefreshGameState();
+                            
                             // Fallback to team number if team data is missing
                             const teamNumber = this.gameState.current_team || 'Unknown';
                             turnIndicator.innerHTML = `<span>⏳ Team ${teamNumber}'s Turn</span>`;
@@ -2702,6 +2713,7 @@
                         turnIndicator.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
                         turnIndicator.style.border = '2px solid #fbbf24';
                         turnIndicator.style.boxShadow = '0 0 20px rgba(245, 158, 11, 0.3)';
+                        }
                     }
                     } catch (error) {
                         console.error('Error updating turn indicator:', error);
@@ -3281,8 +3293,13 @@
             // Host observer mode removed - host can now participate in the game
             
             validateGameState() {
+                console.log('=== VALIDATING GAME STATE ===');
+                console.log('Raw game state:', this.gameState);
+                
                 // Ensure all teams exist in the game state
                 if (this.gameState && this.gameState.team_count) {
+                    console.log(`Validating ${this.gameState.team_count} teams`);
+                    
                     for (let i = 1; i <= this.gameState.team_count; i++) {
                         if (!this.gameState[`team${i}`]) {
                             console.warn(`Team ${i} missing from game state, creating default team`);
@@ -3298,7 +3315,25 @@
                             console.warn(`Team ${i} has no name, setting default name`);
                             this.gameState[`team${i}`].name = `Team ${i}`;
                         }
+                        
+                        console.log(`Team ${i}:`, this.gameState[`team${i}`]);
                     }
+                }
+                
+                // Validate current team exists
+                if (this.gameState && this.gameState.current_team) {
+                    const currentTeamKey = `team${this.gameState.current_team}`;
+                    if (!this.gameState[currentTeamKey]) {
+                        console.error(`Current team ${this.gameState.current_team} does not exist! Creating it...`);
+                        this.gameState[currentTeamKey] = {
+                            name: `Team ${this.gameState.current_team}`,
+                            score: 0,
+                            timer: this.gameState.custom_game_timer || 300
+                        };
+                    }
+                    console.log(`Current team (${this.gameState.current_team}):`, this.gameState[currentTeamKey]);
+                } else {
+                    console.error('No current team set in game state!');
                 }
                 
                 // If team 1 is missing and we have host_player_id, create a default "Host" team
@@ -3712,6 +3747,30 @@
                 if (window.customJeopardyGame) {
                     console.log('Fixing player ID to:', playerId);
                     return window.customJeopardyGame.fixPlayerId(playerId);
+                } else {
+                    console.log('Game not initialized yet');
+                    return null;
+                }
+            };
+            
+            window.fixTeamData = () => {
+                if (window.customJeopardyGame) {
+                    console.log('Fixing team data...');
+                    
+                    // Validate and fix game state
+                    window.customJeopardyGame.validateGameState();
+                    
+                    // Force refresh from server
+                    window.customJeopardyGame.forceRefreshGameState();
+                    
+                    // Update display
+                    setTimeout(() => {
+                        window.customJeopardyGame.updateDisplay();
+                        window.customJeopardyGame.generateTeamCards();
+                    }, 1000);
+                    
+                    console.log('Team data fix complete');
+                    return true;
                 } else {
                     console.log('Game not initialized yet');
                     return null;
