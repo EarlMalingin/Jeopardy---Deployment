@@ -1212,6 +1212,11 @@
                         
                         // Initialize game for lobby games
                         this.initializeGameForLobby();
+                        
+                        // Force refresh game state to ensure we have latest team data
+                        setTimeout(() => {
+                            this.forceRefreshGameState();
+                        }, 1000);
                     } else {
                         // For non-lobby games, get from session
                         const response = await fetch('/jeopardy/game-state');
@@ -1447,6 +1452,9 @@
                     this.gameState = newGameState;
                     
                     console.log('updateLocalGameState - Old current team:', oldGameState?.current_team, 'New current team:', newGameState.current_team);
+                    
+                    // Validate game state after update
+                    this.validateGameState();
                     
                     // Check if it just became this player's turn
                     const wasMyTurn = oldGameState ? !oldGameState.current_question : false;
@@ -2549,36 +2557,49 @@
              }
 
             updateDisplay() {
-                for (let i = 1; i <= this.gameState.team_count; i++) {
-                    const team = this.gameState[`team${i}`];
-                    const teamNameElement = document.getElementById(`team${i}Name`);
-                    const teamScoreElement = document.getElementById(`team${i}Score`);
-                    const teamCardElement = document.getElementById(`team${i}Card`);
-                    
-                    if (teamNameElement) teamNameElement.textContent = team.name;
-                    if (teamScoreElement) teamScoreElement.textContent = `${team.score} ${team.score === 1 ? 'point' : 'points'}`;
-                    if (teamCardElement) {
-                        teamCardElement.classList.toggle('team-active', this.gameState.current_team === i);
+                try {
+                    // Validate game state first
+                    if (!this.gameState || !this.gameState.team_count) {
+                        console.warn('Game state not ready, skipping display update');
+                        return;
                     }
                     
-                    this.updateTeamTimer(i, team.timer);
-                }
+                    for (let i = 1; i <= this.gameState.team_count; i++) {
+                        const team = this.gameState[`team${i}`];
+                        if (!team) {
+                            console.warn(`Team ${i} not found in game state`);
+                            continue;
+                        }
+                        
+                        const teamNameElement = document.getElementById(`team${i}Name`);
+                        const teamScoreElement = document.getElementById(`team${i}Score`);
+                        const teamCardElement = document.getElementById(`team${i}Card`);
+                        
+                        if (teamNameElement) teamNameElement.textContent = team.name || `Team ${i}`;
+                        if (teamScoreElement) teamScoreElement.textContent = `${team.score || 0} ${(team.score || 0) === 1 ? 'point' : 'points'}`;
+                        if (teamCardElement) {
+                            teamCardElement.classList.toggle('team-active', this.gameState.current_team === i);
+                        }
+                        
+                        this.updateTeamTimer(i, team.timer || 300);
+                    }
                 
                 // Update turn indicator
                 const turnIndicator = document.getElementById('turnIndicator');
                 
                 if (turnIndicator) {
-                    // Check if this is a single-player game
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const isSinglePlayer = urlParams.get('mode') === 'singleplayer';
-                    
-                    // For single-player games, ensure we're not in observer mode
-                    if (isSinglePlayer) {
-                        // Set player team to 1 for single-player games
-                        sessionStorage.setItem('playerTeam', '1');
-                    }
-                    
-                    if (this.isCurrentPlayerTurn()) {
+                    try {
+                        // Check if this is a single-player game
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const isSinglePlayer = urlParams.get('mode') === 'singleplayer';
+                        
+                        // For single-player games, ensure we're not in observer mode
+                        if (isSinglePlayer) {
+                            // Set player team to 1 for single-player games
+                            sessionStorage.setItem('playerTeam', '1');
+                        }
+                        
+                        if (this.isCurrentPlayerTurn()) {
                         turnIndicator.classList.remove('hidden');
                         // Show player name if available
                         const currentPlayerId = this.gameState.current_player_id;
@@ -2633,14 +2654,36 @@
                             const teamNumber = this.gameState.current_team || 'Unknown';
                             turnIndicator.innerHTML = `<span>⏳ Team ${teamNumber}'s Turn</span>`;
                         }
+                        
+                        // Additional debugging for team data
+                        console.log('Team data debug:', {
+                            currentTeamNumber: this.gameState.current_team,
+                            currentTeamData: currentTeam,
+                            allTeams: Object.keys(this.gameState).filter(key => key.startsWith('team')).map(key => ({
+                                key: key,
+                                data: this.gameState[key]
+                            }))
+                        });
                         turnIndicator.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
                         turnIndicator.style.border = '2px solid #fbbf24';
                         turnIndicator.style.boxShadow = '0 0 20px rgba(245, 158, 11, 0.3)';
+                    }
+                    } catch (error) {
+                        console.error('Error updating turn indicator:', error);
+                        // Show a fallback turn indicator
+                        turnIndicator.classList.remove('hidden');
+                        turnIndicator.innerHTML = '<span>⏳ Loading...</span>';
+                        turnIndicator.style.background = 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)';
                     }
                 }
                 
                 // Also update the game board to reflect turn changes
                 this.updateGameBoard();
+            } catch (error) {
+                console.error('Error in updateDisplay:', error);
+                // Show error notification
+                this.showErrorNotification('Error updating display. Please refresh the page.');
+            }
             }
 
             updateTeamTimer(teamNumber, seconds) {
@@ -2944,37 +2987,42 @@
             }
 
                                      isCurrentPlayerTurn() {
-                // For lobby games, we need to determine which player this is
-                const urlParams = new URLSearchParams(window.location.search);
-                const lobbyCode = urlParams.get('lobby');
-                
-                if (lobbyCode) {
-                    // This is a lobby game - use server-assigned player ID
-                    const playerId = sessionStorage.getItem('playerId');
+                try {
+                    // For lobby games, we need to determine which player this is
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const lobbyCode = urlParams.get('lobby');
                     
-                    if (playerId) {
-                                                 // Host can now participate in the game - no observer restrictions
+                    if (lobbyCode) {
+                        // This is a lobby game - use server-assigned player ID
+                        const playerId = sessionStorage.getItem('playerId');
                         
-                        // Check if there's a current question being answered
-                        if (this.gameState.current_question) {
-                            // If there's a current question, only the player who selected it can interact
-                            const isMyTurn = this.gameState.current_player_id === playerId;
-                            console.log(`isCurrentPlayerTurn - Question in progress - Player ID: ${playerId}, Current player ID: ${this.gameState.current_player_id}, Is my turn: ${isMyTurn}`);
-                            return isMyTurn;
+                        if (playerId) {
+                            // Host can now participate in the game - no observer restrictions
+                            
+                            // Check if there's a current question being answered
+                            if (this.gameState?.current_question) {
+                                // If there's a current question, only the player who selected it can interact
+                                const isMyTurn = this.gameState?.current_player_id === playerId;
+                                console.log(`isCurrentPlayerTurn - Question in progress - Player ID: ${playerId}, Current player ID: ${this.gameState?.current_player_id}, Is my turn: ${isMyTurn}`);
+                                return isMyTurn;
+                            } else {
+                                // No current question - check if it's this player's turn to select a question
+                                const isMyTurn = this.gameState?.current_player_id === playerId;
+                                console.log(`isCurrentPlayerTurn - No question in progress - Player ID: ${playerId}, Current player ID: ${this.gameState?.current_player_id}, Is my turn: ${isMyTurn}`);
+                                return isMyTurn;
+                            }
                         } else {
-                            // No current question - check if it's this player's turn to select a question
-                            const isMyTurn = this.gameState.current_player_id === playerId;
-                            console.log(`isCurrentPlayerTurn - No question in progress - Player ID: ${playerId}, Current player ID: ${this.gameState.current_player_id}, Is my turn: ${isMyTurn}`);
-                            return isMyTurn;
+                            console.log('isCurrentPlayerTurn - No player ID assigned yet, allowing interaction');
+                            return true; // Allow interaction until ID is assigned
                         }
                     } else {
-                        console.log('isCurrentPlayerTurn - No player ID assigned yet, allowing interaction');
-                        return true; // Allow interaction until ID is assigned
+                        // This is a single player game - always allow interaction
+                        console.log('isCurrentPlayerTurn - Single player game, allowing interaction');
+                        return true;
                     }
-                } else {
-                    // This is a single player game - always allow interaction
-                    console.log('isCurrentPlayerTurn - Single player game, allowing interaction');
-                    return true;
+                } catch (error) {
+                    console.error('Error in isCurrentPlayerTurn:', error);
+                    return false; // Default to false on error
                 }
             }
 
@@ -3205,6 +3253,17 @@
                     }
                 }
                 
+                // If team 1 is missing and we have host_player_id, create a default "Host" team
+                if (this.gameState && this.gameState.host_player_id && !this.gameState.team1) {
+                    console.warn('Team 1 missing but host exists, creating Host team');
+                    this.gameState.team1 = {
+                        name: 'Host',
+                        score: 0,
+                        timer: this.gameState.custom_game_timer || 300,
+                        is_host: true
+                    };
+                }
+                
                 // Ensure current_team is valid
                 if (this.gameState && this.gameState.current_team) {
                     if (this.gameState.current_team > this.gameState.team_count || this.gameState.current_team < 1) {
@@ -3274,6 +3333,27 @@
                 }
                 console.log('=======================');
             }
+            
+            // Debug function to check turn status
+            debugTurn() {
+                console.log('=== Turn Debug ===');
+                console.log('Current team:', this.gameState.current_team);
+                console.log('Current player ID:', this.gameState.current_player_id);
+                console.log('Is my turn:', this.isCurrentPlayerTurn());
+                console.log('Team data:', this.gameState[`team${this.gameState.current_team}`]);
+                console.log('All teams:');
+                for (let i = 1; i <= this.gameState.team_count; i++) {
+                    const team = this.gameState[`team${i}`];
+                    console.log(`  Team ${i}:`, team);
+                }
+                console.log('================');
+                return {
+                    currentTeam: this.gameState.current_team,
+                    currentPlayerId: this.gameState.current_player_id,
+                    isMyTurn: this.isCurrentPlayerTurn(),
+                    teamData: this.gameState[`team${this.gameState.current_team}`]
+                };
+            }
 
             showTurnAdvancedNotification() {
                 const currentTeam = this.gameState[`team${this.gameState.current_team}`];
@@ -3289,6 +3369,54 @@
                     top: 1rem;
                     right: 1rem;
                     left: 1rem;
+                    z-index: 50;
+                    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+                    border: 2px solid #60a5fa;
+                    box-shadow: 0 10px 25px rgba(59, 130, 246, 0.4);
+                    font-weight: 600;
+                    font-size: 12px;
+                    max-width: 300px;
+                    text-align: center;
+                `;
+                notification.textContent = message;
+                
+                document.body.appendChild(notification);
+                
+                // Remove notification after 3 seconds
+                setTimeout(() => {
+                    notification.style.animation = 'fadeOut 0.5s ease-out';
+                    setTimeout(() => {
+                        if (notification.parentElement) {
+                            notification.remove();
+                        }
+                    }, 500);
+                }, 3000);
+            }
+            
+            // Force refresh game state from server
+            async forceRefreshGameState() {
+                console.log('Force refreshing game state from server...');
+                try {
+                    const response = await fetch('/jeopardy/get-game-state', {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success && data.game_state) {
+                        console.log('Received fresh game state from server');
+                        this.updateLocalGameState(data.game_state);
+                    } else {
+                        console.error('Failed to get fresh game state:', data.message);
+                    }
+                } catch (error) {
+                    console.error('Error force refreshing game state:', error);
+                }
+            }
                     z-index: 50;
                     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
                     border: 2px solid #60a5fa;

@@ -249,7 +249,7 @@ class JeopardyController extends Controller
         $gameState = [
             'team_count' => $teamCount,
             'current_team' => 1,
-            'current_player_id' => $playerIds[0] ?? '002', // Start with first visible player
+            'current_player_id' => $playerIds[0] ?? '001', // Start with first player (host)
             'player_ids' => $playerIds,
             'host_player_id' => $hostId, // Store host ID separately
             'question_timer' => $questionTimer,
