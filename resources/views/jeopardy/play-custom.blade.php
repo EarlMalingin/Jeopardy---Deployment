@@ -1452,8 +1452,21 @@
                     const wasMyTurn = oldGameState ? !oldGameState.current_question : false;
                     const isMyTurn = !this.gameState.current_question;
                     
+                    // Check if a question was selected by another player
+                    const currentPlayerId = this.getCurrentPlayerId();
+                    const questionOwner = this.gameState.question_owner;
+                    const questionSelectedByOther = this.gameState.current_question && questionOwner && questionOwner !== currentPlayerId;
+                    
                     if (!wasMyTurn && isMyTurn) {
                         this.showYourTurnNotification();
+                    }
+                    
+                    // Show notification if question was selected by another player
+                    if (questionSelectedByOther && this.gameState.current_question) {
+                        this.showQuestionSelectedNotification(
+                            this.gameState.current_question.category, 
+                            this.gameState.current_question.value
+                        );
                     }
                     
                     // Immediately update display and game board
@@ -1897,6 +1910,9 @@
                          this.hasSelectedQuestion = true; // Mark that current player selected this question
                          this.showQuestion(data.question, data.is_steal_attempt);
                          console.log('Question shown successfully');
+                         
+                         // Show notification to other players that a question was selected
+                         this.showQuestionSelectedNotification(data.question.category, data.question.value);
                         
                         console.log('About to start timer...');
                         this.startTimer(data.timer || this.gameState.custom_question_timer || 30);
@@ -1909,12 +1925,8 @@
                         // Create a simplified game state for other players that shows question selection and timer
                         const syncGameState = {
                             ...this.gameState,
-                            current_question: {
-                                category: data.question.category,
-                                value: data.question.value,
-                                selected: true
-                                // Note: No question or answer content is sent to other players
-                            },
+                            current_question: null, // Don't show question to other players
+                            question_owner: data.question_owner || this.getCurrentPlayerId(), // Track who owns the question
                             question_timer: data.timer // Include the timer so other players see it immediately
                         };
                         
@@ -2444,17 +2456,14 @@
                         console.log(`  Team ${i}: ${team.name}`);
                     }
                     
-                    // Call the timer endpoint to advance to next team
-                    const response = await fetch('/jeopardy/timer', {
+                    // Call the advance turn endpoint to advance to next team
+                    const response = await fetch('/jeopardy/advance-turn', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                         },
-                        body: JSON.stringify({
-                            time_remaining: 0, // Force turn advancement
-                            team_timer: currentTeamTimer
-                        })
+                        body: JSON.stringify({})
                     });
 
                     const data = await response.json();
@@ -3060,6 +3069,42 @@
                     }, 500);
                 }, 3000);
             }
+            
+            showQuestionSelectedNotification(category, value) {
+                const currentPlayerId = this.getCurrentPlayerId();
+                const questionOwner = this.gameState.question_owner;
+                
+                // Only show notification if this player didn't select the question
+                if (currentPlayerId !== questionOwner) {
+                    const message = `🎯 ${category} for ${value} points has been selected.`;
+                    
+                    // Create temporary notification
+                    const notification = document.createElement('div');
+                    notification.className = 'mobile-notification bg-purple-600 text-white px-4 sm:px-6 py-2 sm:py-4 rounded-lg shadow-lg z-50 bounce-in';
+                    notification.style.cssText = `
+                        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+                        border: 2px solid #a78bfa;
+                        box-shadow: 0 10px 25px rgba(139, 92, 246, 0.4);
+                        font-weight: 600;
+                        font-size: 12px;
+                        max-width: 300px;
+                        text-align: center;
+                    `;
+                    notification.textContent = message;
+                    
+                    document.body.appendChild(notification);
+                    
+                    // Remove notification after 3 seconds
+                    setTimeout(() => {
+                        notification.style.animation = 'fadeOut 0.5s ease-out';
+                        setTimeout(() => {
+                            if (notification.parentElement) {
+                                notification.remove();
+                            }
+                        }, 500);
+                    }, 3000);
+                }
+            }
 
             showQuestionForOtherPlayers(question, currentTeam) {
                 console.log('=== SHOW QUESTION FOR OTHER PLAYERS START ===');
@@ -3204,6 +3249,10 @@
             }
 
             // Host observer mode removed - host can now participate in the game
+            
+            getCurrentPlayerId() {
+                return sessionStorage.getItem('playerId') || null;
+            }
             
             validateGameState() {
                 // Ensure all teams exist in the game state

@@ -437,10 +437,23 @@ class JeopardyController extends Controller
         // Get current player team for debugging
         $currentPlayerTeam = $this->getCurrentPlayerTeam();
         
+        // Check if current question should be shown to this player
+        $currentPlayerId = $this->getCurrentPlayerId();
+        $questionOwner = $gameState['question_owner'] ?? null;
+        
+        // Only show question to the player who owns it
+        if (isset($gameState['current_question']) && $questionOwner !== $currentPlayerId) {
+            // Hide question from other players
+            $gameState['current_question'] = null;
+            $gameState['question_owner'] = null;
+        }
+        
         // Debug logging for game state request
         \Log::info('Game state request debug:');
         \Log::info('Session ID: ' . Session::getId());
         \Log::info('Current player team: ' . $currentPlayerTeam);
+        \Log::info('Current player ID: ' . $currentPlayerId);
+        \Log::info('Question owner: ' . $questionOwner);
         \Log::info('Lobby players: ' . json_encode(Session::get('lobby_players', [])));
         \Log::info('Game state current team: ' . ($gameState['current_team'] ?? 'N/A'));
         
@@ -732,7 +745,11 @@ class JeopardyController extends Controller
             ], 404);
         }
         
+        // Store question only for the current player's session
+        $currentPlayerId = $gameState['current_player_id'] ?? '001';
         $gameState['current_question'] = $question;
+        $gameState['question_owner'] = $currentPlayerId; // Track who owns the current question
+        $gameState['question_selected_at'] = time(); // Track when question was selected
         
         // Use custom question timer if available, otherwise default to 30
         $questionTimer = $gameState['custom_question_timer'] ?? 30;
@@ -748,6 +765,7 @@ class JeopardyController extends Controller
         return response()->json([
             'success' => true,
             'question' => $question,
+            'question_owner' => $currentPlayerId,
             'timer' => $questionTimer,
             'is_steal_attempt' => $isStealAttempt
         ]);
@@ -769,7 +787,46 @@ class JeopardyController extends Controller
             return response()->json(['error' => 'No active question'], 400);
         }
 
-        // Host can participate but doesn't have turns - no restrictions
+        // Check if this is a custom game and validate turn
+        if (isset($gameState['difficulty']) && $gameState['difficulty'] === 'custom') {
+            $currentPlayerId = $gameState['current_player_id'] ?? '001';
+            $playerId = $this->getCurrentPlayerId();
+            $questionOwner = $gameState['question_owner'] ?? null;
+            
+            // Debug logging for answer validation
+            \Log::info('Answer validation debug:');
+            \Log::info('Current player ID: ' . $currentPlayerId);
+            \Log::info('Player ID: ' . $playerId);
+            \Log::info('Question owner: ' . $questionOwner);
+            \Log::info('Session ID: ' . Session::getId());
+            
+            // Check if player has a valid ID
+            if ($playerId === null) {
+                \Log::info('Answer validation failed: Player has no valid ID');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Player not properly assigned'
+                ], 403);
+            }
+            
+            // Check if it's this player's turn and they own the question
+            if ($playerId !== $currentPlayerId) {
+                \Log::info('Answer validation failed: Not player\'s turn');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Not your turn to answer'
+                ], 403);
+            }
+            
+            // Check if this player owns the current question
+            if ($questionOwner !== $playerId) {
+                \Log::info('Answer validation failed: Player does not own the question');
+                return response()->json([
+                    'success' => false,
+                    'error' => 'You do not own the current question'
+                ], 403);
+            }
+        }
 
         $currentTeam = 'team' . $gameState['current_team'];
         $question = $gameState['current_question'];
@@ -863,35 +920,16 @@ class JeopardyController extends Controller
         \Log::info('Answered questions array: ' . json_encode($gameState['answered_questions']));
         \Log::info('Game state keys: ' . json_encode(array_keys($gameState)));
         
-        // Switch to next player ID (cycle through all players except host for turns)
-        if (isset($gameState['player_ids']) && isset($gameState['current_player_id'])) {
-            $playerIds = $gameState['player_ids'];
-            $hostId = $gameState['host_player_id'] ?? '001';
-            
-            // Filter out host from turn rotation but allow participation
-            $playablePlayerIds = array_filter($playerIds, function($id) use ($hostId) {
-                return $id !== $hostId;
-            });
-            
-            $currentIndex = array_search($gameState['current_player_id'], $playablePlayerIds);
-            
-            if ($currentIndex !== false) {
-                // Move to next playable player ID
-                $nextIndex = ($currentIndex + 1) % count($playablePlayerIds);
-                $gameState['current_player_id'] = array_values($playablePlayerIds)[$nextIndex];
-                
-                // Update current_team to match the playable team index
-                $gameState['current_team'] = $nextIndex + 1;
-                
-                \Log::info('Advanced to next player: ' . $gameState['current_player_id'] . ' (team ' . $gameState['current_team'] . ')');
-            }
-        } else {
-            // Fallback to old team-based system
-            $gameState['current_team'] = $gameState['current_team'] >= $gameState['team_count'] ? 1 : $gameState['current_team'] + 1;
-        }
+        // DO NOT advance turn here - let the frontend handle turn advancement
+        // This prevents double advancement and ensures proper turn flow
+        \Log::info("=== ANSWER SUBMITTED ===");
+        \Log::info("Team: {$gameState['current_team']} ({$gameState[$currentTeam]['name']})");
+        \Log::info("Answer correct: " . ($isCorrect ? 'YES' : 'NO'));
+        \Log::info("Turn advancement will be handled by frontend");
         
-        // Clear current question
+        // Clear current question and ownership
         $gameState['current_question'] = null;
+        $gameState['question_owner'] = null;
         
         \Log::info('All team scores after: ' . json_encode([
             'team1' => $gameState['team1']['score'] ?? 'N/A',
@@ -1003,6 +1041,54 @@ class JeopardyController extends Controller
         // Each player manages their own timer independently
         
         return response()->json(['success' => true, 'game_state' => $gameState]);
+    }
+
+    public function advanceTurn(Request $request)
+    {
+        $gameState = Session::get('jeopardy_game');
+        
+        if (!$gameState) {
+            return response()->json(['error' => 'No active game'], 400);
+        }
+
+        $oldTeam = $gameState['current_team'];
+        $teamCount = $gameState['team_count'];
+        
+        // Log the current state before advancement
+        \Log::info("=== TURN ADVANCEMENT DEBUG ===");
+        \Log::info("Current team: {$oldTeam}");
+        \Log::info("Total teams: {$teamCount}");
+        \Log::info("All teams:");
+        for ($i = 1; $i <= $teamCount; $i++) {
+            $teamName = $gameState["team{$i}"]['name'];
+            \Log::info("  Team {$i}: {$teamName}");
+        }
+        
+        // Calculate expected next team
+        $expectedNextTeam = ($oldTeam % $teamCount) + 1;
+        
+        // Advance to next team
+        $gameState['current_team'] = $gameState['current_team'] == $teamCount ? 1 : $gameState['current_team'] + 1;
+        
+        \Log::info("Turn advancement: Team {$oldTeam} -> Team {$gameState['current_team']} (Total teams: {$teamCount})");
+        \Log::info("Expected next team: {$expectedNextTeam}");
+        \Log::info("Actual next team: {$gameState['current_team']}");
+        
+        // Clear current question and ownership
+        $gameState['current_question'] = null;
+        $gameState['question_owner'] = null;
+        $gameState['is_steal_attempt'] = false;
+
+        Session::put('jeopardy_game', $gameState);
+        Session::save();
+
+        // Update lobby game state if this is a lobby game
+        $this->updateLobbyGameStateIfNeeded($gameState);
+
+        return response()->json([
+            'success' => true,
+            'game_state' => $gameState
+        ]);
     }
 
     public function resetGame()
